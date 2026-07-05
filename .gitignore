@@ -1,0 +1,13 @@
+# Credenciales de Canvas: NUNCA commitear
+.env
+canvas_config.json
+
+# Preferencias locales de la GUI (por usuario)
+canvas_gui_prefs.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Salida de descargas (por si se apunta dentro del repo)
+Canvas (descarga)/
