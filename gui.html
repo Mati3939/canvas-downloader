@@ -1,0 +1,1223 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Descargador de Canvas</title>
+<style>
+  /* ---- Tokens: tema claro (papel) por defecto ---- */
+  :root {
+    --bg: #f6f3ed;
+    --panel: #fffdf9;
+    --panel-2: #efeae1;
+    --inset: #f1ece3;
+    --border: #ddd5c7;
+    --border-strong: #c9bfae;
+    --text: #2b2620;
+    --muted: #7a7263;
+    --accent: #b25e2a;
+    --accent-contrast: #ffffff;
+    --accent-soft: rgba(178, 94, 42, 0.10);
+    --accent-border: rgba(178, 94, 42, 0.45);
+    --ok: #3d8a5f;
+    --danger: #b3402e;
+    --danger-soft: rgba(179, 64, 46, 0.10);
+    --console-bg: #241f18;
+    --console-text: #d8cfbe;
+    --banda-texto: rgba(255, 255, 255, 0.92);
+    --shadow: 0 1px 2px rgba(43, 38, 32, 0.06), 0 4px 16px rgba(43, 38, 32, 0.05);
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16130f;
+      --panel: #1e1a15;
+      --panel-2: #272219;
+      --inset: #14110d;
+      --border: #363023;
+      --border-strong: #4a4232;
+      --text: #ece5d8;
+      --muted: #a2977f;
+      --accent: #e09b52;
+      --accent-contrast: #241a0e;
+      --accent-soft: rgba(224, 155, 82, 0.12);
+      --accent-border: rgba(224, 155, 82, 0.5);
+      --ok: #6fc492;
+      --danger: #e5705c;
+      --danger-soft: rgba(229, 112, 92, 0.12);
+      --console-bg: #100d09;
+      --console-text: #cfc5ae;
+      --shadow: none;
+    }
+  }
+  /* El toggle manual pisa la preferencia del sistema en ambas direcciones */
+  :root[data-theme="light"] {
+    --bg: #f6f3ed; --panel: #fffdf9; --panel-2: #efeae1; --inset: #f1ece3;
+    --border: #ddd5c7; --border-strong: #c9bfae; --text: #2b2620; --muted: #7a7263;
+    --accent: #b25e2a; --accent-contrast: #ffffff;
+    --accent-soft: rgba(178, 94, 42, 0.10); --accent-border: rgba(178, 94, 42, 0.45);
+    --ok: #3d8a5f; --danger: #b3402e; --danger-soft: rgba(179, 64, 46, 0.10);
+    --console-bg: #241f18; --console-text: #d8cfbe;
+    --shadow: 0 1px 2px rgba(43, 38, 32, 0.06), 0 4px 16px rgba(43, 38, 32, 0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #16130f; --panel: #1e1a15; --panel-2: #272219; --inset: #14110d;
+    --border: #363023; --border-strong: #4a4232; --text: #ece5d8; --muted: #a2977f;
+    --accent: #e09b52; --accent-contrast: #241a0e;
+    --accent-soft: rgba(224, 155, 82, 0.12); --accent-border: rgba(224, 155, 82, 0.5);
+    --ok: #6fc492; --danger: #e5705c; --danger-soft: rgba(229, 112, 92, 0.12);
+    --console-bg: #100d09; --console-text: #cfc5ae;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  button { font-family: inherit; }
+  input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; margin: 0; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { max-width: 1220px; margin: 0 auto; padding: 1.4rem 1.5rem 3rem; }
+
+  /* ---- Cabecera ---- */
+  header {
+    display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+    padding-bottom: 1rem; margin-bottom: 1.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .titulo h1 {
+    font-family: var(--serif);
+    font-size: 1.7rem; font-weight: 600; margin: 0;
+    letter-spacing: 0.01em;
+    text-wrap: balance;
+  }
+  .titulo .sub { color: var(--muted); font-size: 0.85rem; margin-top: 0.15rem; }
+  .header-acciones { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+  .btn-sec {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 7px;
+    padding: 0.4rem 0.8rem; font-size: 0.82rem; cursor: pointer;
+  }
+  .btn-sec:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sec:disabled { opacity: 0.5; cursor: default; }
+
+  /* ---- Avisos ---- */
+  #error-banner {
+    display: none;
+    background: var(--danger-soft);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 0.65rem 1rem; border-radius: 8px;
+    margin-bottom: 1rem; font-size: 0.88rem;
+  }
+  #error-banner button {
+    float: right; background: none; border: none; color: inherit;
+    cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0 0 0.6rem;
+  }
+  .aviso {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 1.2rem 1.4rem; line-height: 1.6;
+    max-width: 46rem;
+  }
+  .aviso h2 { font-family: var(--serif); margin: 0 0 0.6rem; font-size: 1.15rem; }
+  .aviso code { background: var(--panel-2); padding: 0.12em 0.4em; border-radius: 4px; font-family: var(--mono); font-size: 0.85em; }
+  .aviso pre { background: var(--panel-2); padding: 0.8rem; border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 0.8em; }
+
+  /* ---- Layout principal ---- */
+  .layout { display: grid; grid-template-columns: minmax(0, 8fr) minmax(310px, 4fr); gap: 1.3rem; align-items: start; }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.15rem 1.2rem;
+    box-shadow: var(--shadow);
+  }
+  .panel > h2 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 1.15rem; margin: 0 0 0.9rem;
+  }
+  .opciones { position: sticky; top: 1rem; }
+  @media (max-width: 960px) { .opciones { position: static; } }
+
+  .rotulo {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--muted);
+    margin: 0 0 0.5rem;
+  }
+
+  /* ---- Panel de cursos ---- */
+  #buscador {
+    width: 100%; padding: 0.55rem 0.8rem; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--text); font-size: 0.9rem; font-family: var(--sans);
+    margin-bottom: 0.9rem;
+  }
+  #buscador::placeholder { color: var(--muted); }
+
+  .grupo { margin-bottom: 0.8rem; }
+  .grupo-header {
+    display: flex; align-items: center; gap: 0.45rem;
+    cursor: pointer; padding: 0.45rem 0.3rem;
+    font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); user-select: none;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+  }
+  .grupo-header:hover { color: var(--text); background: var(--panel-2); }
+  .grupo-header .toggle { display: inline-block; width: 1em; transition: transform 0.15s; font-size: 0.9em; }
+  .grupo-header.colapsado .toggle { transform: rotate(-90deg); }
+  .contador {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 400;
+    letter-spacing: 0; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 0.02rem 0.5rem; color: var(--muted);
+  }
+
+  /* ---- Tarjetas de curso (estilo Canvas) ---- */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+    gap: 0.8rem;
+    max-height: 62vh; overflow-y: auto;
+    padding: 0.15rem;
+  }
+  .cards.colapsado { display: none; }
+
+  .curso-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    align-self: start;
+    box-shadow: var(--shadow);
+  }
+  .curso-card:has(.chk-curso:checked) { border-color: var(--accent-border); }
+  .curso-card[draggable="true"] { cursor: grab; }
+  .curso-card.arrastrando { opacity: 0.35; cursor: grabbing; }
+  .curso-card.oculta { opacity: 0.8; }
+  .curso-card.oculta .banda { filter: saturate(0.25) brightness(0.9); }
+
+  .banda {
+    height: 62px;
+    background: var(--banda, #41698f);
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .banda .iniciales {
+    font-family: var(--serif);
+    font-size: 1.9rem; font-weight: 700;
+    color: var(--banda-texto);
+    opacity: 0.55; letter-spacing: 0.05em;
+    user-select: none;
+  }
+  .banda .chk-wrap {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 6px; padding: 4px;
+    display: flex; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  }
+
+  .card-cuerpo { padding: 0.6rem 0.75rem 0.55rem; flex: 1; }
+  .card-nombre {
+    font-size: 0.86rem; font-weight: 600; line-height: 1.3;
+    overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .card-pie {
+    display: flex; align-items: center; justify-content: flex-end; gap: 0.15rem;
+    padding: 0 0.75rem 0.6rem;
+  }
+  .card-pie .curso-term { margin-right: auto; }
+  .curso-term {
+    font-family: var(--mono); font-size: 0.66rem; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.08rem 0.4rem; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; max-width: 60%;
+  }
+  .btn-exp, .btn-ocultar {
+    background: none; border: none; color: var(--muted);
+    font-size: 0.76rem; cursor: pointer; padding: 0.15rem 0.3rem;
+    border-radius: 5px; white-space: nowrap;
+  }
+  .btn-exp:hover, .btn-ocultar:hover { color: var(--accent); background: var(--accent-soft); }
+
+  .detalle {
+    display: none;
+    border-top: 1px solid var(--border);
+    background: var(--panel-2);
+    padding: 0.55rem 0.7rem 0.65rem;
+    font-size: 0.83rem;
+  }
+  .detalle.abierto { display: block; }
+  .carpeta-nodo { margin: 0.05rem 0; }
+  .carpeta-fila {
+    display: flex; align-items: center; gap: 0.45rem; cursor: pointer;
+    padding: 0.14rem 0.3rem; border-radius: 5px;
+  }
+  .carpeta-fila:hover { background: var(--panel); }
+  .carpeta-fila span { overflow-wrap: anywhere; }
+  .carpeta-fila .nodo-raiz { font-weight: 600; }
+  .nota-arbol { color: var(--muted); font-size: 0.78rem; padding: 0.3rem 0.3rem; line-height: 1.5; }
+  .error-inline { color: var(--danger); font-size: 0.78rem; padding: 0.3rem 0.3rem; }
+
+  /* ---- Fuentes como chips ---- */
+  .fuentes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; margin-bottom: 1.1rem; }
+  .chip {
+    display: flex; align-items: flex-start; gap: 0.5rem;
+    border: 1px solid var(--border); border-radius: 9px;
+    padding: 0.5rem 0.6rem; cursor: pointer;
+    background: var(--panel);
+  }
+  .chip:hover { border-color: var(--border-strong); }
+  .chip:has(input:checked) { background: var(--accent-soft); border-color: var(--accent-border); }
+  .chip input { margin-top: 0.18rem; }
+  .chip .chip-nombre { font-size: 0.86rem; font-weight: 600; display: block; }
+  .chip .chip-desc { font-size: 0.72rem; color: var(--muted); display: block; margin-top: 0.05rem; line-height: 1.35; }
+
+  /* ---- Destino y opciones ---- */
+  .campo { margin-bottom: 1.1rem; }
+  #dest {
+    display: block; width: 100%;
+    padding: 0.5rem 0.7rem; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--text); font-size: 0.82rem; font-family: var(--mono);
+  }
+  #dest::placeholder { color: var(--muted); font-family: var(--sans); }
+  .check-simple { display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; cursor: pointer; }
+  .check-simple .hint { color: var(--muted); font-size: 0.74rem; }
+
+  /* ---- Botón principal ---- */
+  #btn-descargar {
+    width: 100%; padding: 0.75rem; border-radius: 9px; border: none;
+    background: var(--accent); color: var(--accent-contrast);
+    font-size: 0.98rem; font-weight: 600; cursor: pointer;
+    transition: filter 0.15s;
+  }
+  #btn-descargar:hover:not(:disabled) { filter: brightness(1.08); }
+  #btn-descargar:disabled { background: var(--panel-2); color: var(--muted); cursor: not-allowed; }
+  #contador-sel {
+    text-align: center; font-size: 0.8rem; color: var(--muted);
+    margin-top: 0.5rem; font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- Progreso ---- */
+  .progreso-head { display: flex; align-items: center; gap: 0.6rem; margin: 1.2rem 0 0.5rem; }
+  .progreso-head .rotulo { margin: 0; flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-size: 0.72rem; font-weight: 600;
+    border-radius: 999px; padding: 0.15rem 0.65rem;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .pill.activo { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+  .pill.activo::before { background: var(--accent); animation: pulso 1.2s ease-in-out infinite; }
+  .pill.listo { color: var(--ok); border-color: var(--ok); }
+  .pill.listo::before { background: var(--ok); }
+  @keyframes pulso { 50% { opacity: 0.3; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pill.activo::before { animation: none; }
+    * { transition: none !important; }
+  }
+
+  #log {
+    background: var(--console-bg); color: var(--console-text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.7rem 0.8rem; height: 230px; overflow-y: auto;
+    font-family: var(--mono); font-size: 0.74rem; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word; margin: 0;
+  }
+  #log:empty::before { content: "El detalle de la descarga aparece acá."; color: color-mix(in srgb, var(--console-text) 45%, transparent); }
+
+  .resumen { display: none; grid-template-columns: repeat(3, 1fr); gap: 0.45rem; margin-top: 0.6rem; }
+  .resumen .stat {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.5rem 0.6rem; text-align: center;
+  }
+  .resumen .stat b {
+    display: block; font-size: 1.15rem; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .resumen .stat span { font-size: 0.7rem; color: var(--muted); }
+  .resumen .stat.st-nuevos b { color: var(--ok); }
+  .resumen .stat.st-errores b { color: var(--danger); }
+  .resumen .stat.st-errores.cero b { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="titulo">
+      <h1>Descargador de Canvas</h1>
+      <div class="sub">Bajá a tu disco el material de tus cursos: archivos, módulos, tareas, anuncios y foros.</div>
+    </div>
+    <div class="header-acciones">
+      <button class="btn-sec" id="btn-recargar" title="Vuelve a pedir la lista de cursos a Canvas">↻ Recargar cursos</button>
+      <button class="btn-sec" id="btn-tema" title="Cambiar tema claro/oscuro">◐ Tema</button>
+    </div>
+  </header>
+
+  <div id="error-banner"><button id="cerrar-error" title="cerrar">&times;</button><span id="error-texto"></span></div>
+  <div id="aviso-config" class="aviso" style="display:none"></div>
+
+  <div class="layout" id="layout" style="display:none">
+    <section class="panel arbol">
+      <h2>Cursos</h2>
+      <input type="search" id="buscador" placeholder="Buscar curso por nombre…">
+
+      <div class="grupo">
+        <div class="grupo-header" data-target="lista-activos" id="header-activos">
+          <span class="toggle">▾</span> Activos <span class="contador" id="contador-activos">0</span>
+        </div>
+        <div class="cards" id="lista-activos"></div>
+      </div>
+
+      <div class="grupo">
+        <div class="grupo-header colapsado" data-target="lista-pasados" id="header-pasados">
+          <span class="toggle">▾</span> Pasados <span class="contador" id="contador-pasados">0</span>
+        </div>
+        <div class="cards colapsado" id="lista-pasados"></div>
+      </div>
+
+      <div class="grupo">
+        <div class="grupo-header colapsado" data-target="lista-ocultos" id="header-ocultos">
+          <span class="toggle">▾</span> Ocultados <span class="contador" id="contador-ocultos">0</span>
+        </div>
+        <div class="cards colapsado" id="lista-ocultos"></div>
+      </div>
+    </section>
+
+    <section class="panel opciones">
+      <h2>Descarga</h2>
+
+      <p class="rotulo">Qué bajar de cada curso</p>
+      <div class="fuentes">
+        <label class="chip"><input type="checkbox" id="f-archivos" checked>
+          <span><span class="chip-nombre">Archivos</span><span class="chip-desc">La pestaña Archivos, con sus carpetas</span></span></label>
+        <label class="chip"><input type="checkbox" id="f-modulos" checked>
+          <span><span class="chip-nombre">Módulos</span><span class="chip-desc">Archivos y páginas de cada módulo</span></span></label>
+        <label class="chip"><input type="checkbox" id="f-tareas" checked>
+          <span><span class="chip-nombre">Tareas</span><span class="chip-desc">Enunciados y sus adjuntos</span></span></label>
+        <label class="chip"><input type="checkbox" id="f-entregas">
+          <span><span class="chip-nombre">Mis entregas</span><span class="chip-desc">Lo que vos entregaste en cada tarea</span></span></label>
+        <label class="chip"><input type="checkbox" id="f-anuncios" checked>
+          <span><span class="chip-nombre">Anuncios</span><span class="chip-desc">Mensajes del profesor y adjuntos</span></span></label>
+        <label class="chip"><input type="checkbox" id="f-discusiones" checked>
+          <span><span class="chip-nombre">Discusiones</span><span class="chip-desc">Foros del curso y sus adjuntos</span></span></label>
+      </div>
+
+      <div class="campo">
+        <p class="rotulo">Carpeta destino</p>
+        <input type="text" id="dest" placeholder="(carpeta por defecto)">
+      </div>
+
+      <div class="campo">
+        <label class="check-simple"><input type="checkbox" id="por-termino">
+          Organizar por término académico <span class="hint">— destino/término/curso</span></label>
+      </div>
+
+      <button id="btn-descargar" disabled>Descargar selección</button>
+      <div id="contador-sel">0 cursos seleccionados</div>
+
+      <div class="progreso-head">
+        <p class="rotulo">Progreso</p>
+        <span class="pill" id="estado-pill">Inactivo</span>
+      </div>
+      <pre id="log"></pre>
+      <div id="resumen" class="resumen">
+        <div class="stat st-nuevos"><b id="r-nuevos">0</b><span>nuevos</span></div>
+        <div class="stat"><b id="r-saltados">0</b><span>ya existían</span></div>
+        <div class="stat st-errores"><b id="r-errores">0</b><span>errores</span></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var cursosData = { activos: [], pasados: [] };
+  // cid -> { loaded, tree, nodesById, folders:{id:{checked}}, mods:[{id,nombre}],
+  //          modChecked:{id:bool}, courseChecked, indeterminate, _chkEl, _detEl }
+  var courseState = {};
+  var descargaActiva = false;
+  var pollTimer = null;
+  var pollDesde = 0;
+
+  // Preferencias por usuario (guardadas en el servidor): cursos ocultos y orden
+  var prefs = { ocultos: [], orden: {} };
+  var prefsSaveTimer = null;
+
+  // Estado del drag & drop de tarjetas
+  var dragCard = null;
+  var dragCont = null;
+  var dragMoved = false;
+
+  // Paleta de bandas para las tarjetas (tonos académicos, funcionan en ambos temas)
+  var BANDAS = ["#41698f", "#3f7d74", "#5f7d4f", "#8a6d3b", "#a3552f",
+                "#8a5378", "#5f5d91", "#996a45", "#647d33", "#2f6f8f"];
+
+  function $(id) { return document.getElementById(id); }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function bandaDe(cid) { return BANDAS[Math.abs(cid) % BANDAS.length]; }
+
+  function inicialesDe(nombre) {
+    var palabras = String(nombre || "?").trim().split(/\s+/).filter(function (p) {
+      return /^[a-záéíóúüñ0-9]/i.test(p);
+    });
+    if (!palabras.length) return "?";
+    if (palabras.length === 1) return palabras[0].slice(0, 2).toUpperCase();
+    return (palabras[0][0] + palabras[1][0]).toUpperCase();
+  }
+
+  // ---------------------------------------------------------------------
+  // Tema claro/oscuro
+  // ---------------------------------------------------------------------
+  var temaGuardado = null;
+  try { temaGuardado = localStorage.getItem("canvas-gui-tema"); } catch (e) {}
+  if (temaGuardado === "light" || temaGuardado === "dark") {
+    document.documentElement.dataset.theme = temaGuardado;
+  }
+  $("btn-tema").addEventListener("click", function () {
+    var actual = document.documentElement.dataset.theme;
+    if (!actual) {
+      actual = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    var nuevo = actual === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nuevo;
+    try { localStorage.setItem("canvas-gui-tema", nuevo); } catch (e) {}
+  });
+
+  function mostrarError(msg) {
+    $("error-texto").textContent = msg;
+    $("error-banner").style.display = "block";
+  }
+  $("cerrar-error").addEventListener("click", function () {
+    $("error-banner").style.display = "none";
+  });
+
+  async function fetchJSON(url, opts) {
+    var resp = await fetch(url, opts);
+    var data = null;
+    try { data = await resp.json(); } catch (e) { /* respuesta sin cuerpo JSON */ }
+    return { status: resp.status, ok: resp.ok, data: data };
+  }
+
+  // ---------------------------------------------------------------------
+  // Carga inicial
+  // ---------------------------------------------------------------------
+  async function init() {
+    try {
+      var r = await fetchJSON("/api/estado");
+      if (!r.ok) { mostrarError("No se pudo consultar /api/estado (HTTP " + r.status + ")."); return; }
+      if (!r.data || !r.data.config) {
+        mostrarAvisoConfig();
+        return;
+      }
+      $("layout").style.display = "grid";
+      await cargarPrefs();
+      await cargarCursos(false);
+      await cargarProgresoInicial();
+    } catch (err) {
+      mostrarError("No se pudo conectar con el servidor: " + err);
+    }
+  }
+
+  function mostrarAvisoConfig() {
+    var aviso = $("aviso-config");
+    aviso.style.display = "block";
+    aviso.innerHTML =
+      "<h2>Falta configurar Canvas</h2>" +
+      "<p>No se encontró <code>CANVAS_BASE_URL</code> / <code>CANVAS_TOKEN</code>. Configurá alguna de estas opciones junto a <code>canvas_descargar.py</code>:</p>" +
+      "<p><b>Opción A — archivo <code>.env</code>:</b></p>" +
+      "<pre>CANVAS_BASE_URL=https://TU-INSTITUCION.instructure.com\nCANVAS_TOKEN=tu_token</pre>" +
+      "<p><b>Opción B — archivo <code>canvas_config.json</code>:</b></p>" +
+      "<pre>{\n  \"base_url\": \"https://tu-institucion.instructure.com\",\n  \"token\": \"xxxx\"\n}</pre>" +
+      "<p>El token se genera en Canvas: Cuenta → Configuración → Tokens de acceso aprobados.</p>" +
+      "<p>Después de configurar, recargá esta página.</p>";
+  }
+
+  async function cargarCursos(recargar) {
+    var r = await fetchJSON("/api/cursos" + (recargar ? "?recargar=1" : ""));
+    if (!r.ok) {
+      mostrarError((r.data && r.data.error) || ("Error cargando cursos (HTTP " + r.status + ")"));
+      return;
+    }
+    cursosData = r.data;
+    renderCursos();
+  }
+
+  $("btn-recargar").addEventListener("click", async function () {
+    var btn = $("btn-recargar");
+    btn.disabled = true;
+    btn.textContent = "Recargando…";
+    courseState = {};   // se pierde la selección: la lista puede haber cambiado
+    try {
+      await cargarCursos(true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "↻ Recargar cursos";
+      updateSummary();
+    }
+  });
+
+  async function cargarProgresoInicial() {
+    var r = await fetchJSON("/api/progreso?desde=0");
+    if (!r.ok || !r.data) return;
+    if (r.data.dest) $("dest").value = r.data.dest;
+    if (r.data.activo) {
+      descargaActiva = true;
+      pollDesde = 0;
+      setPill("activo");
+      iniciarPolling();
+    }
+    actualizarBotonDescarga();
+  }
+
+  // ---------------------------------------------------------------------
+  // Preferencias (ocultos + orden)
+  // ---------------------------------------------------------------------
+  async function cargarPrefs() {
+    try {
+      var r = await fetchJSON("/api/prefs");
+      if (r.ok && r.data) {
+        prefs = { ocultos: r.data.ocultos || [], orden: r.data.orden || {} };
+      }
+    } catch (e) { /* sin prefs se sigue igual */ }
+  }
+
+  function guardarPrefs() {
+    if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+    prefsSaveTimer = setTimeout(function () {
+      fetch("/api/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(prefs),
+      }).catch(function () { /* si falla, se reintenta en el próximo cambio */ });
+    }, 400);
+  }
+
+  function onOcultar(cid) {
+    if (prefs.ocultos.indexOf(cid) === -1) prefs.ocultos.push(cid);
+    var st = courseState[cid];
+    if (st) {   // ocultar también lo des-selecciona
+      st.courseChecked = false;
+      st.indeterminate = false;
+      Object.keys(st.folders).forEach(function (fid) { st.folders[fid].checked = false; });
+      (st.mods || []).forEach(function (m) { st.modChecked[m.id] = false; });
+    }
+    guardarPrefs();
+    renderCursos();
+    updateSummary();
+  }
+
+  function onMostrar(cid) {
+    prefs.ocultos = prefs.ocultos.filter(function (id) { return id !== cid; });
+    guardarPrefs();
+    renderCursos();
+    updateSummary();
+  }
+
+  // ---------------------------------------------------------------------
+  // Tarjetas de curso
+  // ---------------------------------------------------------------------
+  function ordenar(lista, ordenIds) {
+    if (!ordenIds || !ordenIds.length) return lista.slice();
+    var pos = {};
+    ordenIds.forEach(function (id, i) { pos[id] = i; });
+    return lista.slice().sort(function (a, b) {
+      var pa = (a.id in pos) ? pos[a.id] : 1e9;
+      var pb = (b.id in pos) ? pos[b.id] : 1e9;
+      return pa - pb;
+    });
+  }
+
+  function renderCursos() {
+    var ocultosSet = {};
+    prefs.ocultos.forEach(function (id) { ocultosSet[id] = true; });
+    var activos = (cursosData.activos || []).filter(function (c) { return !ocultosSet[c.id]; });
+    var pasados = (cursosData.pasados || []).filter(function (c) { return !ocultosSet[c.id]; });
+    var ocultos = (cursosData.activos || []).concat(cursosData.pasados || [])
+      .filter(function (c) { return ocultosSet[c.id]; });
+    renderGrupo("lista-activos", ordenar(activos, prefs.orden["activos"]), false);
+    renderGrupo("lista-pasados", ordenar(pasados, prefs.orden["pasados"]), false);
+    renderGrupo("lista-ocultos", ordenar(ocultos, prefs.orden["ocultos"]), true);
+    $("contador-activos").textContent = activos.length;
+    $("contador-pasados").textContent = pasados.length;
+    $("contador-ocultos").textContent = ocultos.length;
+  }
+
+  function renderGrupo(containerId, lista, esOcultos) {
+    var cont = $(containerId);
+    cont.innerHTML = "";
+    lista.forEach(function (c) {
+      if (!courseState[c.id]) {
+        courseState[c.id] = {
+          loaded: false, tree: [], nodesById: {}, folders: {},
+          mods: [], modChecked: {},
+          courseChecked: false, indeterminate: false,
+        };
+      }
+      var card = document.createElement("div");
+      card.className = "curso-card" + (esOcultos ? " oculta" : "");
+      card.dataset.nombre = (c.name || "").toLowerCase();
+      card.dataset.cid = c.id;
+      card.draggable = true;
+      card.addEventListener("dragstart", function (e) {
+        dragCard = card;
+        dragCont = cont;
+        dragMoved = false;
+        card.classList.add("arrastrando");
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", String(c.id)); } catch (err) {}
+      });
+      card.addEventListener("dragend", function () {
+        card.classList.remove("arrastrando");
+        if (dragMoved) guardarOrdenDesdeDOM(cont, containerId.replace("lista-", ""));
+        dragCard = null;
+        dragCont = null;
+        dragMoved = false;
+      });
+
+      // Banda de color con iniciales + checkbox
+      var banda = document.createElement("div");
+      banda.className = "banda";
+      banda.style.setProperty("--banda", bandaDe(c.id));
+
+      var ini = document.createElement("span");
+      ini.className = "iniciales";
+      ini.textContent = inicialesDe(c.name);
+
+      var chkWrap = document.createElement("label");
+      chkWrap.className = "chk-wrap";
+      chkWrap.title = "Seleccionar curso completo";
+      var chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.className = "chk-curso";
+      chk.checked = courseState[c.id].courseChecked;
+      chk.indeterminate = courseState[c.id].indeterminate;
+      chk.addEventListener("change", function () { onCourseToggle(c.id, chk.checked); });
+      chkWrap.appendChild(chk);
+
+      banda.appendChild(ini);
+      banda.appendChild(chkWrap);
+
+      // Cuerpo: nombre
+      var cuerpo = document.createElement("div");
+      cuerpo.className = "card-cuerpo";
+      var nombre = document.createElement("div");
+      nombre.className = "card-nombre";
+      nombre.textContent = c.name || "(sin nombre)";
+      nombre.title = c.name || "";
+      cuerpo.appendChild(nombre);
+
+      // Pie: término + botón de contenido
+      var pie = document.createElement("div");
+      pie.className = "card-pie";
+      if (c.term) {
+        var term = document.createElement("span");
+        term.className = "curso-term";
+        term.textContent = c.term;
+        term.title = c.term;
+        pie.appendChild(term);
+      }
+      var btnOcultar = document.createElement("button");
+      btnOcultar.className = "btn-ocultar";
+      btnOcultar.textContent = esOcultos ? "Mostrar" : "Ocultar";
+      btnOcultar.title = esOcultos ? "Devolver el curso a su sección" : "Mover el curso a Ocultados";
+      btnOcultar.addEventListener("click", function () {
+        if (esOcultos) onMostrar(c.id); else onOcultar(c.id);
+      });
+      pie.appendChild(btnOcultar);
+
+      var btnExp = document.createElement("button");
+      btnExp.className = "btn-exp";
+      btnExp.textContent = "Contenido ▾";
+      btnExp.addEventListener("click", function () { onToggleDetalle(c.id, btnExp); });
+      pie.appendChild(btnExp);
+
+      // Detalle expandible (Pestaña Archivos + Módulos)
+      var det = document.createElement("div");
+      det.className = "detalle";
+      det.id = "detalle-" + c.id;
+
+      card.appendChild(banda);
+      card.appendChild(cuerpo);
+      card.appendChild(pie);
+      card.appendChild(det);
+      cont.appendChild(card);
+
+      courseState[c.id]._chkEl = chk;
+      courseState[c.id]._detEl = det;
+    });
+  }
+
+  async function onToggleDetalle(cid, btnEl) {
+    var det = $("detalle-" + cid);
+    var abierto = det.classList.toggle("abierto");
+    btnEl.textContent = abierto ? "Contenido ▴" : "Contenido ▾";
+    if (!abierto) return;
+    var st = courseState[cid];
+    if (st.loaded) return;
+    det.innerHTML = '<div class="nota-arbol">Cargando contenido…</div>';
+    try {
+      var pedidos = await Promise.all([
+        fetchJSON("/api/carpetas?curso=" + encodeURIComponent(cid)),
+        fetchJSON("/api/modulos?curso=" + encodeURIComponent(cid)),
+      ]);
+      var rc = pedidos[0], rm = pedidos[1];
+      if (!rc.ok) throw new Error((rc.data && rc.data.error) || ("HTTP " + rc.status));
+      if (!rm.ok) throw new Error((rm.data && rm.data.error) || ("HTTP " + rm.status));
+      buildTree(cid, (rc.data && rc.data.carpetas) || [], st.courseChecked);
+      st.mods = (rm.data && rm.data.modulos) || [];
+      st.modChecked = {};
+      st.mods.forEach(function (m) { st.modChecked[m.id] = st.courseChecked; });
+      st.loaded = true;
+      renderDetalle(cid);
+    } catch (err) {
+      det.innerHTML = '<div class="error-inline">No se pudo cargar el contenido: ' + escapeHtml(String(err.message || err)) + "</div>";
+    }
+  }
+
+  function buildTree(cid, carpetas, valorInicial) {
+    var st = courseState[cid];
+    st.nodesById = {};
+    st.folders = {};
+    carpetas.forEach(function (f) {
+      var label = (f.nombre === "course files") ? "Pestaña Archivos" : f.nombre;
+      st.nodesById[f.id] = {
+        id: f.id, label: label, parent_id: f.parent_id, children: [],
+        esRaiz: f.nombre === "course files",
+      };
+      st.folders[f.id] = { checked: !!valorInicial };
+    });
+    st.tree = [];
+    carpetas.forEach(function (f) {
+      var node = st.nodesById[f.id];
+      if (f.parent_id !== null && f.parent_id !== undefined && st.nodesById[f.parent_id]) {
+        st.nodesById[f.parent_id].children.push(node);
+      } else {
+        st.tree.push(node);
+      }
+    });
+  }
+
+  function folderVisualState(cid, node) {
+    var st = courseState[cid];
+    var self = st.folders[node.id].checked;
+    if (node.children.length === 0) return { checked: self, indeterminate: false };
+    var childStates = node.children.map(function (c) { return folderVisualState(cid, c); });
+    var allTrue = self && childStates.every(function (s) { return s.checked && !s.indeterminate; });
+    var allFalse = !self && childStates.every(function (s) { return !s.checked && !s.indeterminate; });
+    if (allTrue) return { checked: true, indeterminate: false };
+    if (allFalse) return { checked: false, indeterminate: false };
+    return { checked: false, indeterminate: true };
+  }
+
+  function buildFolderNodeEl(cid, node, depth) {
+    var wrap = document.createElement("div");
+    wrap.className = "carpeta-nodo";
+    wrap.style.paddingLeft = (depth * 1.1) + "em";
+
+    var label = document.createElement("label");
+    label.className = "carpeta-fila";
+
+    var chk = document.createElement("input");
+    chk.type = "checkbox";
+    var vis = folderVisualState(cid, node);
+    chk.checked = vis.checked;
+    chk.indeterminate = vis.indeterminate;
+    chk.addEventListener("change", function () { onFolderToggle(cid, node.id, chk.checked); });
+
+    var span = document.createElement("span");
+    span.textContent = node.label;
+    if (node.esRaiz) span.className = "nodo-raiz";
+
+    label.appendChild(chk);
+    label.appendChild(span);
+    wrap.appendChild(label);
+
+    node.children.forEach(function (child) {
+      wrap.appendChild(buildFolderNodeEl(cid, child, depth + 1));
+    });
+    return wrap;
+  }
+
+  function modulosVisualState(cid) {
+    var st = courseState[cid];
+    if (!st.mods.length) return { checked: false, indeterminate: false };
+    var marcados = st.mods.filter(function (m) { return st.modChecked[m.id]; }).length;
+    if (marcados === st.mods.length) return { checked: true, indeterminate: false };
+    if (marcados === 0) return { checked: false, indeterminate: false };
+    return { checked: false, indeterminate: true };
+  }
+
+  function renderDetalle(cid) {
+    var st = courseState[cid];
+    var det = st._detEl;
+    if (!det) return;
+    det.innerHTML = "";
+
+    // --- Pestaña Archivos (árbol de carpetas, con la raíz renombrada) ---
+    if (st.tree.length) {
+      var frag = document.createDocumentFragment();
+      st.tree.forEach(function (node) { frag.appendChild(buildFolderNodeEl(cid, node, 0)); });
+      det.appendChild(frag);
+    } else {
+      var nota = document.createElement("div");
+      nota.className = "nota-arbol";
+      nota.textContent = "Sin carpetas visibles en la pestaña Archivos. Los demás contenidos se descargan igual.";
+      det.appendChild(nota);
+    }
+
+    // --- Módulos como nodo seleccionable con hijos ---
+    if (st.mods.length) {
+      var modWrap = document.createElement("div");
+      modWrap.className = "carpeta-nodo";
+
+      var label = document.createElement("label");
+      label.className = "carpeta-fila";
+      var chkM = document.createElement("input");
+      chkM.type = "checkbox";
+      var visM = modulosVisualState(cid);
+      chkM.checked = visM.checked;
+      chkM.indeterminate = visM.indeterminate;
+      chkM.addEventListener("change", function () { onModulosToggle(cid, chkM.checked); });
+      var spanM = document.createElement("span");
+      spanM.textContent = "Módulos";
+      spanM.className = "nodo-raiz";
+      label.appendChild(chkM);
+      label.appendChild(spanM);
+      modWrap.appendChild(label);
+
+      st.mods.forEach(function (m) {
+        var hijo = document.createElement("div");
+        hijo.className = "carpeta-nodo";
+        hijo.style.paddingLeft = "1.1em";
+        var lab = document.createElement("label");
+        lab.className = "carpeta-fila";
+        var chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.checked = !!st.modChecked[m.id];
+        chk.addEventListener("change", function () { onModuloToggle(cid, m.id, chk.checked); });
+        var span = document.createElement("span");
+        span.textContent = m.nombre;
+        lab.appendChild(chk);
+        lab.appendChild(span);
+        hijo.appendChild(lab);
+        modWrap.appendChild(hijo);
+      });
+      det.appendChild(modWrap);
+    } else {
+      var notaM = document.createElement("div");
+      notaM.className = "nota-arbol";
+      notaM.textContent = "(sin módulos)";
+      det.appendChild(notaM);
+    }
+  }
+
+  function setSubtreeChecked(cid, node, value) {
+    courseState[cid].folders[node.id].checked = value;
+    node.children.forEach(function (c) { setSubtreeChecked(cid, c, value); });
+  }
+
+  function recomputeCourse(cid) {
+    var st = courseState[cid];
+    var estados = st.tree.map(function (r) { return folderVisualState(cid, r); });
+    if (st.mods.length) estados.push(modulosVisualState(cid));
+    if (!estados.length) return;   // sin contenido cargado: se respeta el checkbox del curso
+    var allTrue = estados.every(function (s) { return s.checked && !s.indeterminate; });
+    var allFalse = estados.every(function (s) { return !s.checked && !s.indeterminate; });
+    if (allTrue) { st.courseChecked = true; st.indeterminate = false; }
+    else if (allFalse) { st.courseChecked = false; st.indeterminate = false; }
+    else { st.courseChecked = true; st.indeterminate = true; }
+  }
+
+  function updateCourseCheckboxDOM(cid) {
+    var st = courseState[cid];
+    if (st._chkEl) {
+      st._chkEl.checked = st.courseChecked;
+      st._chkEl.indeterminate = st.indeterminate;
+    }
+  }
+
+  function onCourseToggle(cid, checked) {
+    var st = courseState[cid];
+    st.courseChecked = checked;
+    st.indeterminate = false;
+    if (st.loaded) {
+      Object.keys(st.folders).forEach(function (fid) { st.folders[fid].checked = checked; });
+      st.mods.forEach(function (m) { st.modChecked[m.id] = checked; });
+      renderDetalle(cid);
+    }
+    updateCourseCheckboxDOM(cid);
+    updateSummary();
+  }
+
+  function onFolderToggle(cid, fid, checked) {
+    var st = courseState[cid];
+    setSubtreeChecked(cid, st.nodesById[fid], checked);
+    recomputeCourse(cid);
+    renderDetalle(cid);
+    updateCourseCheckboxDOM(cid);
+    updateSummary();
+  }
+
+  function onModulosToggle(cid, checked) {
+    var st = courseState[cid];
+    st.mods.forEach(function (m) { st.modChecked[m.id] = checked; });
+    recomputeCourse(cid);
+    renderDetalle(cid);
+    updateCourseCheckboxDOM(cid);
+    updateSummary();
+  }
+
+  function onModuloToggle(cid, mid, checked) {
+    var st = courseState[cid];
+    st.modChecked[mid] = checked;
+    recomputeCourse(cid);
+    renderDetalle(cid);
+    updateCourseCheckboxDOM(cid);
+    updateSummary();
+  }
+
+  // ---------------------------------------------------------------------
+  // Drag & drop de tarjetas (reordenar dentro de cada sección)
+  // ---------------------------------------------------------------------
+  function cartaSiguiente(cont, x, y) {
+    // Primera tarjeta (en orden de lectura) cuyo centro queda "después" del puntero
+    var cards = Array.prototype.filter.call(
+      cont.querySelectorAll(".curso-card:not(.arrastrando)"),
+      function (el) { return el.style.display !== "none"; }
+    );
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].getBoundingClientRect();
+      if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) return cards[i];
+    }
+    return null;
+  }
+
+  function guardarOrdenDesdeDOM(cont, grupoKey) {
+    prefs.orden[grupoKey] = Array.prototype.map.call(
+      cont.querySelectorAll(".curso-card"),
+      function (el) { return Number(el.dataset.cid); }
+    );
+    guardarPrefs();
+  }
+
+  ["lista-activos", "lista-pasados", "lista-ocultos"].forEach(function (containerId) {
+    var cont = $(containerId);
+    cont.addEventListener("dragover", function (e) {
+      if (!dragCard || dragCont !== cont) return;   // solo dentro de la misma sección
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      var sig = cartaSiguiente(cont, e.clientX, e.clientY);
+      if (sig === dragCard.nextElementSibling) return;
+      if (sig) cont.insertBefore(dragCard, sig);
+      else cont.appendChild(dragCard);
+      dragMoved = true;
+    });
+    cont.addEventListener("drop", function (e) { e.preventDefault(); });
+  });
+
+  // ---------------------------------------------------------------------
+  // Búsqueda
+  // ---------------------------------------------------------------------
+  $("buscador").addEventListener("input", function () {
+    var filtro = $("buscador").value.trim().toLowerCase();
+    document.querySelectorAll(".curso-card").forEach(function (el) {
+      el.style.display = (!filtro || el.dataset.nombre.indexOf(filtro) !== -1) ? "" : "none";
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Grupos colapsables
+  // ---------------------------------------------------------------------
+  document.querySelectorAll(".grupo-header").forEach(function (header) {
+    header.addEventListener("click", function () {
+      var target = $(header.dataset.target);
+      var colapsado = target.classList.toggle("colapsado");
+      header.classList.toggle("colapsado", colapsado);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Selección -> payload
+  // ---------------------------------------------------------------------
+  function buildSeleccion() {
+    var cursos = [];
+    Object.keys(courseState).forEach(function (cidStr) {
+      var cid = Number(cidStr);
+      var st = courseState[cidStr];
+      if (!st.loaded) {
+        if (st.courseChecked) cursos.push({ id: cid, carpetas: null, modulos: null });
+        return;
+      }
+      var fIds = Object.keys(st.folders).map(Number);
+      var mIds = st.mods.map(function (m) { return m.id; });
+      if (!fIds.length && !mIds.length) {
+        if (st.courseChecked) cursos.push({ id: cid, carpetas: null, modulos: null });
+        return;
+      }
+      var fSel = fIds.filter(function (id) { return st.folders[id].checked; });
+      var mSel = mIds.filter(function (id) { return st.modChecked[id]; });
+      if (!fSel.length && !mSel.length) return;
+      // null = todo; lista (aun vacía) = solo esos ids
+      var carpetas = !fIds.length ? null : (fSel.length === fIds.length ? null : fSel);
+      var modulos = !mIds.length ? null : (mSel.length === mIds.length ? null : mSel);
+      cursos.push({ id: cid, carpetas: carpetas, modulos: modulos });
+    });
+    return cursos;
+  }
+
+  function updateSummary() {
+    var n = buildSeleccion().length;
+    $("contador-sel").textContent = n + (n === 1 ? " curso seleccionado" : " cursos seleccionados");
+    actualizarBotonDescarga();
+  }
+
+  function actualizarBotonDescarga() {
+    var n = buildSeleccion().length;
+    $("btn-descargar").disabled = descargaActiva || n === 0;
+  }
+
+  // ---------------------------------------------------------------------
+  // Fuentes
+  // ---------------------------------------------------------------------
+  $("f-entregas").addEventListener("change", function () {
+    if ($("f-entregas").checked) $("f-tareas").checked = true;
+  });
+
+  function fuentesSeleccionadas() {
+    var f = [];
+    if ($("f-archivos").checked) f.push("archivos");
+    if ($("f-modulos").checked) f.push("modulos");
+    if ($("f-tareas").checked) f.push("tareas");
+    if ($("f-entregas").checked) f.push("entregas");
+    if ($("f-anuncios").checked) f.push("anuncios");
+    if ($("f-discusiones").checked) f.push("discusiones");
+    return f;
+  }
+
+  // ---------------------------------------------------------------------
+  // Descarga y progreso
+  // ---------------------------------------------------------------------
+  function setPill(estado) {
+    var pill = $("estado-pill");
+    pill.className = "pill" + (estado === "activo" ? " activo" : estado === "listo" ? " listo" : "");
+    pill.textContent = estado === "activo" ? "Descargando…" : estado === "listo" ? "Completado" : "Inactivo";
+  }
+
+  $("btn-descargar").addEventListener("click", async function () {
+    var seleccion = buildSeleccion();
+    if (seleccion.length === 0) return;
+    var payload = {
+      cursos: seleccion,
+      fuentes: fuentesSeleccionadas(),
+      dest: $("dest").value.trim(),
+      por_termino: $("por-termino").checked,
+    };
+    descargaActiva = true;
+    actualizarBotonDescarga();
+    setPill("activo");
+    $("log").textContent = "";
+    $("resumen").style.display = "none";
+    try {
+      var r = await fetchJSON("/api/descargar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (r.status === 409) {
+        mostrarError("Ya hay una descarga en curso.");
+        descargaActiva = true; // sigue activa en el servidor; arrancamos el poll igual
+        iniciarPolling();
+        return;
+      }
+      if (!r.ok || !r.data || !r.data.ok) {
+        mostrarError((r.data && r.data.error) || "No se pudo iniciar la descarga.");
+        descargaActiva = false;
+        setPill("inactivo");
+        actualizarBotonDescarga();
+        return;
+      }
+      iniciarPolling();
+    } catch (err) {
+      mostrarError("Error de conexión al iniciar la descarga: " + err);
+      descargaActiva = false;
+      setPill("inactivo");
+      actualizarBotonDescarga();
+    }
+  });
+
+  function iniciarPolling() {
+    pollDesde = 0;
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(poll, 1000);
+    poll();
+  }
+
+  async function poll() {
+    try {
+      var r = await fetchJSON("/api/progreso?desde=" + pollDesde);
+      if (!r.ok || !r.data) { return; }
+      var data = r.data;
+      if (data.lineas && data.lineas.length) {
+        var logEl = $("log");
+        logEl.textContent += data.lineas.join("\n") + "\n";
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      pollDesde = data.total;
+      if (!data.activo) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        descargaActiva = false;
+        mostrarResumen(data.resumen);
+        setPill(data.resumen ? "listo" : "inactivo");
+        actualizarBotonDescarga();
+      }
+    } catch (err) {
+      mostrarError("Error consultando el progreso: " + err);
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      descargaActiva = false;
+      setPill("inactivo");
+      actualizarBotonDescarga();
+    }
+  }
+
+  function mostrarResumen(resumen) {
+    var el = $("resumen");
+    if (!resumen) { el.style.display = "none"; return; }
+    $("r-nuevos").textContent = resumen.nuevos;
+    $("r-saltados").textContent = resumen.saltados;
+    $("r-errores").textContent = resumen.errores;
+    el.querySelector(".st-errores").classList.toggle("cero", !resumen.errores);
+    el.style.display = "grid";
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
