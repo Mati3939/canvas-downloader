@@ -190,6 +190,14 @@ class Canvas:
     def archivo(self, cid, fid):
         return self._get_json(f"/api/v1/courses/{cid}/files/{fid}")
 
+    def archivo_global(self, fid):
+        """Archivo por su id global, sin pasar por el curso."""
+        return self._get_json(f"/api/v1/files/{fid}")
+
+    def curso(self, cid):
+        """Datos de un curso puntual (sirve también para cursos concluidos)."""
+        return self._get_json(f"/api/v1/courses/{cid}?include[]=term")
+
     def pagina(self, cid, page_url):
         return self._get_json(f"/api/v1/courses/{cid}/pages/{page_url}")
 
@@ -503,6 +511,128 @@ def descargar_curso(api, curso, dest_root, fuentes, carpetas_ids=None, log=print
     return n, s
 
 
+def _resolver_curso(api, cid):
+    """Devuelve el dict de un curso por id sin depender de que esté en la lista
+    de activos (los cursos concluidos no aparecen ahí)."""
+    try:
+        c = api.curso(cid)
+        if "name" not in c:
+            c["name"] = f"curso_{cid}"
+        return c
+    except requests.HTTPError:
+        return {"id": cid, "name": f"curso_{cid}"}
+
+
+def listar_contenido(api, curso):
+    """Índice del curso (carpetas, archivos, módulos, tareas) como dict
+    serializable, para poder elegir qué bajar sin descargar nada."""
+    cid = curso["id"]
+    salida = {
+        "curso": {
+            "id": cid,
+            "nombre": curso.get("name", f"curso_{cid}"),
+            "termino": (curso.get("term") or {}).get("name", ""),
+        },
+        "carpetas": [], "archivos": [], "modulos": [], "tareas": [], "avisos": [],
+    }
+
+    try:
+        rutas = api.carpetas(cid)
+        archivos = api.archivos(cid)
+    except requests.HTTPError:
+        rutas, archivos = {}, []
+        salida["avisos"].append(
+            "pestaña Archivos no accesible (habitual en cursos concluidos): "
+            "el material suele estar igual bajo Módulos")
+
+    usadas = {}
+    for a in archivos:
+        carpeta = re.sub(r"^course files/?", "", rutas.get(a.get("folder_id"), "files"))
+        usadas[a.get("folder_id")] = carpeta
+        salida["archivos"].append({
+            "id": a["id"],
+            "nombre": a.get("display_name", a.get("filename")),
+            "carpeta": carpeta,
+            "carpeta_id": a.get("folder_id"),
+            "tamano": a.get("size"),
+            "bloqueado": not a.get("url"),
+        })
+    for fid, ruta in sorted(usadas.items(), key=lambda kv: kv[1]):
+        salida["carpetas"].append({
+            "id": fid, "ruta": ruta,
+            "archivos": sum(1 for a in salida["archivos"] if a["carpeta_id"] == fid),
+        })
+
+    try:
+        mods = api.modulos(cid)
+    except requests.HTTPError:
+        mods = []
+        salida["avisos"].append("Módulos no accesibles")
+    for m in mods:
+        entrada = {"id": m.get("id"), "nombre": m.get("name", "módulo"), "items": []}
+        try:
+            items = api.items_modulo(cid, m["id"])
+        except requests.HTTPError:
+            items = []
+        for it in items:
+            cd = it.get("content_details") or {}
+            entrada["items"].append({
+                "titulo": it.get("title"),
+                "tipo": it.get("type"),
+                "file_id": it.get("content_id") if it.get("type") == "File" else None,
+                "tamano": cd.get("size"),
+            })
+        salida["modulos"].append(entrada)
+
+    try:
+        for t in api.tareas(cid):
+            salida["tareas"].append({"id": t.get("id"), "nombre": t.get("name"),
+                                     "entrega": t.get("due_at")})
+    except requests.HTTPError:
+        salida["avisos"].append("Tareas no accesibles")
+
+    return salida
+
+
+def descargar_archivos_sueltos(api, curso, dest_root, file_ids, log=print, por_termino=False):
+    """Baja archivos puntuales por ID, respetando la carpeta de origen del curso."""
+    cid = curso["id"]
+    cname = limpiar(curso.get("name", f"curso_{cid}"))
+    raiz = dest_root
+    if por_termino:
+        raiz = dest_root / limpiar((curso.get("term") or {}).get("name") or "Sin término")
+    try:
+        rutas = api.carpetas(cid)
+    except requests.HTTPError:
+        rutas = {}
+
+    log(f"\n=== {cname} (id {cid}) — archivos seleccionados ===")
+    bajados = saltados = 0
+    for fid in file_ids:
+        try:
+            a = api.archivo(cid, fid)
+        except requests.HTTPError:
+            # En cursos concluidos el archivo puede no resolverse dentro del curso
+            # pero sí por su id global (p. ej. si llegó desde un módulo).
+            try:
+                a = api.archivo_global(fid)
+            except requests.HTTPError as e:
+                log(f"  ✗ archivo {fid}: {e}")
+                continue
+        carpeta = re.sub(r"^course files/?", "", rutas.get(a.get("folder_id"), "files"))
+        subdir = raiz / cname / Path(*[limpiar(p) for p in carpeta.split("/") if p])
+        destino = subdir / limpiar(a.get("display_name") or a.get("filename") or fid)
+        try:
+            if bajar(api, a.get("url"), destino, a.get("size", -1)):
+                bajados += 1; log(f"  ↓ {destino.relative_to(raiz)}")
+            else:
+                saltados += 1; log(f"  = {destino.name} (ya estaba)")
+        except Exception as e:
+            log(f"  ✗ {a.get('display_name', fid)}: {e}")
+    log(f"  → {bajados} nuevos, {saltados} ya existían.")
+    return bajados, saltados
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Descargador de Canvas LMS (archivos + módulos + tareas + anuncios + discusiones)")
@@ -523,7 +653,21 @@ def main():
     ap.add_argument("--incluir-pasados", action="store_true",
                     help="incluir también cursos con inscripciones pasadas/concluidas")
     ap.add_argument("--dest", default=str(DEFAULT_DEST), help="carpeta destino")
+    ap.add_argument("--json", action="store_true",
+                    help="con --listar, imprime la lista de cursos como JSON")
+    ap.add_argument("--contenido", type=int, metavar="ID",
+                    help="vuelca en JSON el índice del curso (carpetas, archivos, "
+                         "módulos, tareas) sin descargar nada, y sale")
+    ap.add_argument("--carpetas", nargs="+", type=int, metavar="ID",
+                    help="bajar solo estas carpetas de la pestaña Archivos")
+    ap.add_argument("--modulos", nargs="+", type=int, metavar="ID",
+                    help="bajar solo estos módulos")
+    ap.add_argument("--archivos", nargs="+", type=int, metavar="ID",
+                    help="bajar solo estos archivos por id (requiere un --curso)")
     args = ap.parse_args()
+
+    if args.archivos and (not args.curso or len(args.curso) != 1):
+        sys.exit("--archivos necesita exactamente un --curso <id> (el curso al que pertenecen).")
 
     fuentes = {"archivos", "modulos"}
     if args.solo_modulos:
@@ -544,6 +688,14 @@ def main():
 
     base, token = cargar_config()
     api = Canvas(base, token)
+
+    if args.contenido:
+        # Se resuelve el curso directo por id: así funciona igual para cursos
+        # activos y concluidos, sin pedir --incluir-pasados.
+        datos = listar_contenido(api, _resolver_curso(api, args.contenido))
+        print(json.dumps(datos, indent=2, ensure_ascii=False))
+        return
+
     cursos = api.cursos()
 
     if args.incluir_pasados:
@@ -559,6 +711,14 @@ def main():
         cursos = [c for c in cursos if f in c.get("name", "").lower()]
 
     if args.listar or not (args.curso or args.todos):
+        if args.json:
+            print(json.dumps([{
+                "id": c["id"],
+                "nombre": c.get("name", "(sin nombre)"),
+                "termino": (c.get("term") or {}).get("name", ""),
+                "pasado": bool(c.get("_pasado")),
+            } for c in cursos], indent=2, ensure_ascii=False))
+            return
         print("Cursos disponibles:")
         for c in cursos:
             term = (c.get("term") or {}).get("name", "")
@@ -571,11 +731,24 @@ def main():
     if args.curso:
         ids = set(args.curso)
         cursos = [c for c in cursos if c["id"] in ids]
+        # Un id que no esté entre los activos (curso concluido) se resuelve
+        # directo, para no tener que acordarse de --incluir-pasados.
+        for cid in sorted(ids - {c["id"] for c in cursos}):
+            cursos.append(_resolver_curso(api, cid))
 
     dest = Path(args.dest)
+
+    if args.archivos:
+        n, s = descargar_archivos_sueltos(api, cursos[0], dest, args.archivos,
+                                          por_termino=args.por_termino)
+        print(f"\nTERMINADO: {n} archivos nuevos, {s} ya estaban. Destino: {dest}")
+        return
+
     tn = ts = 0
     for c in cursos:
-        n, s = descargar_curso(api, c, dest, fuentes, por_termino=args.por_termino)
+        n, s = descargar_curso(api, c, dest, fuentes, por_termino=args.por_termino,
+                               carpetas_ids=set(args.carpetas) if args.carpetas else None,
+                               modulos_ids=set(args.modulos) if args.modulos else None)
         tn += n; ts += s
     print(f"\nTERMINADO: {tn} archivos nuevos, {ts} ya estaban. Destino: {dest}")
 

@@ -66,6 +66,31 @@ python canvas_descargar.py --curso 12345 --dest "D:\Universidad\Canvas"
 
 Destino por defecto: `../Archivos oficiales/Canvas (descarga)/` relativo a la carpeta del script.
 
+### Salida JSON y descarga selectiva
+
+Pensados para automatizar (los usa la skill de Claude Code):
+
+```
+python canvas_descargar.py --listar --json --incluir-pasados   # cursos como JSON
+python canvas_descargar.py --contenido 12345                   # índice del curso como JSON
+python canvas_descargar.py --curso 12345 --archivos 987 654    # solo esos archivos, por id
+python canvas_descargar.py --curso 12345 --solo-archivos --carpetas 111 222
+python canvas_descargar.py --curso 12345 --solo-modulos --modulos 333
+```
+
+`--contenido` no descarga nada: devuelve carpetas, archivos (con id, tamaño y si están bloqueados), módulos con sus ítems, tareas y avisos. Sirve para elegir qué bajar. `--curso <id>` resuelve el id directo, así que también funciona con cursos concluidos sin pasar `--incluir-pasados`.
+
+## Skill de Claude Code
+
+`.claude/skills/canvas/` es una skill que le permite a Claude bajar material desde el chat: identifica el ramo por nombre, pregunta el destino, y descarga el curso completo o archivos puntuales. Para usarla desde cualquier proyecto, enlazala a tu carpeta de skills:
+
+```
+New-Item -ItemType Junction -Path "$env:USERPROFILE\.claude\skills\canvas" `
+         -Target "C:\Claude\canvas downloader\.claude\skills\canvas"
+```
+
+Después basta con pedir en el chat "bajame el material de Base de Datos" o "traeme las diapos de la semana 5 de Cálculo".
+
 ## Estructura de salida
 
 ```
