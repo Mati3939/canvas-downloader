@@ -11,3 +11,9 @@ __pycache__/
 
 # Salida de descargas (por si se apunta dentro del repo)
 Canvas (descarga)/
+
+# Log del lanzador si falla tkinter
+error_inicio.log
+
+# Configuracion local del editor
+.vscode/

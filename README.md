@@ -51,6 +51,29 @@ Abre el navegador en `http://127.0.0.1:8765/` con:
 - Log de progreso en vivo con resumen final (nuevos / ya existían / errores).
 - Tema claro y oscuro.
 
+## Acceso directo en Windows
+
+Para abrirlo con un clic, sin consola ni editor:
+
+```
+powershell -ExecutionPolicy Bypass -File .\instalar_acceso_directo.ps1
+```
+
+Se corre **una sola vez**: crea *Canvas Downloader* en el Menú Inicio (con icono),
+apuntando a `iniciar_canvas.pyw`. Desde ahí lo buscás escribiendo "Canvas" y, con
+clic derecho, lo anclás a Inicio o a la barra de tareas.
+
+`iniciar_canvas.pyw` es el mismo `canvas_gui.py` pero pensado para el doble clic:
+corre bajo `pythonw` (sin ventana de consola), no levanta un segundo servidor si
+ya hay una instancia abierta —solo trae al navegador a la que está corriendo— y
+si algo falla lo avisa en un cuadro de diálogo en vez de cerrarse en silencio.
+
+Para cerrarlo, terminá el proceso `pythonw` desde el Administrador de tareas.
+
+Volvé a correr el instalador si movés la carpeta del proyecto o reinstalás Python
+(el acceso directo guarda las rutas). Necesita Python instalado en la máquina: no
+es un `.exe` autocontenido.
+
 ## Línea de comandos
 
 ```
