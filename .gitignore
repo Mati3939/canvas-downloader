@@ -17,3 +17,9 @@ error_inicio.log
 
 # Configuracion local del editor
 .vscode/
+
+# Proyecto estudiar: config personal, estado y entorno local
+estudiar/config.yaml
+estudiar/state/
+estudiar/logs/
+estudiar/.venv/

@@ -1,0 +1,84 @@
+"""Punto de entrada de estudiar: sync de Canvas -> calendario -> temario -> guía."""
+import argparse
+import sys
+from pathlib import Path
+
+from utils import (ErrorFatal, Log, asegurar_claude_md, buscar_curso, cargar_config,
+                   carpeta_curso, leer_env, resolver_drive_root, verificar_drive_root)
+
+
+def parsear_args(argv=None):
+    ap = argparse.ArgumentParser(prog="estudiar",
+                                 description="Canvas -> Drive -> calendario -> guía de estudio")
+    ap.add_argument("--curso", help="fuerza un ramo (busca por nombre, sin importar tildes)")
+    ap.add_argument("--sin-descarga", action="store_true", help="salta la sincronización con Canvas")
+    ap.add_argument("--solo-sync", action="store_true", help="solo descarga archivos nuevos")
+    ap.add_argument("--dry-run", action="store_true", help="muestra qué haría, sin descargar ni generar")
+    ap.add_argument("--drive-root", help="usa otra carpeta raíz en vez de DRIVE_ROOT (pruebas)")
+    ap.add_argument("--manifest", help="usa otro manifest en vez de state/manifest.json (pruebas)")
+    return ap.parse_args(argv)
+
+
+def elegir_cursos(cfg, texto):
+    if not texto:
+        return cfg["cursos"]
+    encontrados = buscar_curso(cfg, texto)
+    if not encontrados:
+        nombres = ", ".join(c["nombre"] for c in cfg["cursos"])
+        raise ErrorFatal(f"No hay ningún ramo que coincida con '{texto}'. Ramos: {nombres}")
+    if len(encontrados) > 1:
+        nombres = ", ".join(c["nombre"] for c in encontrados)
+        raise ErrorFatal(f"'{texto}' coincide con varios ramos: {nombres}. Sé más específico.")
+    return encontrados
+
+
+def revisar_claude_md(cfg, cursos, raiz, log, crear):
+    vacios = []
+    for c in cursos:
+        estado = asegurar_claude_md(carpeta_curso(raiz, cfg, c), c["nombre"], crear=crear)
+        if estado == "creado":
+            log(f"  + CLAUDE.md creado para {c['nombre']}")
+        if estado in ("creado", "vacio", "falta") and c["rol"] == "estudiante":
+            vacios.append(c["nombre"])
+    if vacios:
+        log("\n⚠ Estos ramos tienen el CLAUDE.md vacío. Completar sus formalidades "
+            "(notación, criterios del profe, estilo de evaluación) es lo que más mejora la guía:")
+        for n in vacios:
+            log(f"    - {n}")
+
+
+def main(argv=None):
+    args = parsear_args(argv)
+    log = Log()
+    try:
+        cfg = cargar_config()
+        env = leer_env()
+        raiz = resolver_drive_root(env, args.drive_root)
+        verificar_drive_root(raiz, escribir=not args.dry_run)
+        cursos = elegir_cursos(cfg, args.curso)
+        log(f"Carpeta de ramos: {Path(raiz) / cfg['semestre']}")
+        if args.dry_run:
+            log("Modo dry-run: no se descarga ni se escribe nada.")
+
+        if not args.sin_descarga:
+            from canvas_sync import MANIFEST_FILE, imprimir_resumen, sincronizar
+            resultados = sincronizar(cfg, cursos, raiz, log, dry_run=args.dry_run,
+                                     manifest_path=args.manifest or MANIFEST_FILE)
+            imprimir_resumen(resultados, log, dry_run=args.dry_run)
+
+        revisar_claude_md(cfg, cursos, raiz, log, crear=not args.dry_run)
+
+        if args.solo_sync:
+            return 0
+        log("\n(Calendario, temario y guía: pendientes de implementar en las etapas 3 a 5.)")
+        return 0
+    except ErrorFatal as e:
+        log(f"\n✗ {e}")
+        return 1
+    except KeyboardInterrupt:
+        log("\nInterrumpido por el usuario.")
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

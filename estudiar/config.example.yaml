@@ -1,0 +1,25 @@
+# Copia este archivo como config.yaml y completa tus ramos.
+# config.yaml no se versiona.
+
+# Subcarpeta de DRIVE_ROOT donde viven los ramos de este semestre.
+semestre: "Semestre 1"
+
+cursos:
+  - nombre: "Cálculo I"
+    canvas_course_id: 12345
+    carpeta: "Cálculo I"              # nombre de la carpeta en DRIVE_ROOT/<semestre>/
+    palabras_calendario: ["cálculo", "calculo"]
+    rol: estudiante                   # estudiante | ayudante (ayudante: solo se sincroniza)
+  # ... un bloque por ramo
+
+evaluacion_keywords: ["control", "certamen", "examen", "prueba", "evaluación", "solemne", "test"]
+dias_horizonte: 30
+max_archivos_por_generacion: 15
+
+canvas:
+  # Fuentes a sincronizar: modulos, archivos, tareas
+  fuentes: ["modulos", "archivos", "tareas"]
+
+claude:
+  comando: "claude"
+  timeout_segundos: 1800
