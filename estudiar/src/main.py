@@ -47,15 +47,15 @@ def revisar_claude_md(cfg, cursos, raiz, log, crear):
             log(f"    - {n}")
 
 
-def elegir_evaluacion(cfg, cursos, log, forzado=False):
-    """Lee el calendario y devuelve la evaluación más cercana entre `cursos`.
-    Si el calendario falla, avisa y devuelve None sin romper lo anterior."""
+def elegir_evaluaciones(cfg, cursos, log, forzado=False):
+    """Lee el calendario y devuelve las próximas evaluaciones de `cursos`, de la
+    más cercana a la más lejana. Si el calendario falla, avisa y devuelve []."""
     from calendar_reader import imprimir_proximas, proximas_evaluaciones
     try:
         proximas, sin_asociar = proximas_evaluaciones(cfg, log)
     except ErrorFatal as e:
         log(f"\n✗ Calendario: {e}")
-        return None
+        return []
     imprimir_proximas(cfg, proximas, sin_asociar, log)
     ids = {c["canvas_course_id"] for c in cursos}
     candidatas = sorted((e for cid, e in proximas.items() if cid in ids), key=lambda e: e.inicio)
@@ -67,8 +67,7 @@ def elegir_evaluacion(cfg, cursos, log, forzado=False):
             log(f"\n{c['nombre']}: {motivo}. No hay nada que preparar.")
         else:
             log("\nNo hay evaluaciones próximas. No hay nada que preparar.")
-        return None
-    return candidatas[0]
+    return candidatas
 
 
 def main(argv=None):
@@ -95,12 +94,19 @@ def main(argv=None):
         if args.solo_sync:
             return 0
 
-        evaluacion = elegir_evaluacion(cfg, cursos, log, forzado=bool(args.curso))
-        if evaluacion is None:
-            return 0
-        log(f"\n→ Ramo elegido: {evaluacion.curso['nombre']} — {evaluacion.nombre_corto} "
-            f"({evaluacion.cuando()})")
-        log("\n(Temario y guía: pendientes de implementar en las etapas 4 y 5.)")
+        candidatas = elegir_evaluaciones(cfg, cursos, log, forzado=bool(args.curso))
+        from syllabus import preparar_temario
+        for ev in candidatas:
+            log(f"\n→ {ev.curso['nombre']} — {ev.nombre_corto} ({ev.cuando()})")
+            temario = preparar_temario(cfg, ev.curso, ev, raiz, log, dry_run=args.dry_run)
+            if temario["estado"] == "saltado":
+                continue
+            if temario["estado"] in ("confirmado", "editado"):
+                log("\n(Generación de la guía: pendiente de implementar en la etapa 5.)")
+            break
+        else:
+            if candidatas:
+                log("\nNo quedan más ramos con evaluaciones próximas.")
         return 0
     except ErrorFatal as e:
         log(f"\n✗ {e}")

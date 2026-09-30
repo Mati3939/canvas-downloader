@@ -24,4 +24,5 @@ canvas:
 
 claude:
   comando: "claude"
+  modelo_temario: "sonnet"
   timeout_segundos: 1800

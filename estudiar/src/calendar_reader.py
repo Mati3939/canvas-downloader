@@ -166,7 +166,10 @@ def _preguntar_curso(ev, opciones, log):
         log(f"    [{i}] {c['nombre']}")
     log("    [i] ignorar siempre   [Enter] saltar por ahora")
     while True:
-        r = input("    > ").strip().lower()
+        try:
+            r = input("    > ").strip().lower()
+        except EOFError:
+            return None
         if r == "":
             return None
         if r == "i":
@@ -233,6 +236,21 @@ def proximas_evaluaciones(cfg, log, ahora=None, interactivo=True):
             continue
         proximas.setdefault(e.curso["canvas_course_id"], e)
     return proximas, sin_asociar
+
+
+def evaluaciones_del_curso(cfg, curso, ahora=None, dias=150):
+    """Todas las evaluaciones de un ramo alrededor de hoy, desde la copia local
+    del calendario (se usa después de `proximas_evaluaciones`)."""
+    if not CACHE_ICS.exists():
+        return []
+    hoy = (ahora or datetime.now(ZONA)).date()
+    crudo = CACHE_ICS.read_bytes()
+    contenidos = [b"BEGIN:VCALENDAR" + p for p in crudo.split(b"BEGIN:VCALENDAR") if p.strip()]
+    evals = [e for e in eventos(contenidos, hoy - timedelta(days=dias), hoy + timedelta(days=dias))
+             if es_evaluacion(e, cfg.get("evaluacion_keywords", []))]
+    asociar(evals, cfg, lambda *_: None, interactivo=False)
+    return [e for e in evals
+            if e.curso and e.curso["canvas_course_id"] == curso["canvas_course_id"]]
 
 
 def imprimir_proximas(cfg, proximas, sin_asociar, log, ahora=None):
