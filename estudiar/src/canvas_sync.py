@@ -10,7 +10,9 @@ Todas las llamadas a la API son GET.
 """
 import os
 import re
+import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 import html as _html
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +27,7 @@ from canvas_descargar import Canvas
 
 MANIFEST_FILE = STATE_DIR / "manifest.json"
 REINTENTOS = 5
+HILOS = 6  # consultas simultaneas a la API
 
 
 # ---------------------------------------------------------------- HTTP
@@ -147,6 +150,17 @@ class _SyncCurso:
         self.resumen = {"nuevos": [], "actualizados": [], "sin_cambios": 0,
                         "omitidos": [], "errores": []}
         self.indice = {"modulos": [], "tareas": [], "archivos_sueltos": []}
+        self._metas = {}     # file id -> metadatos precargados
+        self._paginas = {}   # page_url -> página precargada
+
+    def _estado(self, texto):
+        """Línea de avance que se sobrescribe (solo en terminal, no va al log)."""
+        if sys.stdout.isatty():
+            print(f"\r  {texto[:70]:<70}", end="", flush=True)
+
+    def _limpiar_estado(self):
+        if sys.stdout.isatty():
+            print("\r" + " " * 72 + "\r", end="", flush=True)
 
     # ---- archivos
 
@@ -168,7 +182,7 @@ class _SyncCurso:
         self.vistos.add(fid)
         try:
             if meta is None or "url" not in meta:
-                meta = _meta_archivo(self.api, self.cid, fid)
+                meta = self._metas.get(fid) or _meta_archivo(self.api, self.cid, fid)
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code in (401, 403, 404):
                 self.resumen["omitidos"].append(f"archivo {fid} ({contexto}): sin acceso en Canvas")
@@ -244,14 +258,14 @@ class _SyncCurso:
         except requests.HTTPError:
             self.log("  (sin Módulos accesibles)")
             return
-        for m in mods:
+        self._estado(f"leyendo {len(mods)} módulos…")
+        items_por_modulo = self._precargar(mods, meta_por_id)
+        for m, items in zip(mods, items_por_modulo):
             mname = limpiar(m.get("name", "modulo"))
             subdir = Path("Módulos") / mname
             ficha = {"nombre": m.get("name"), "desbloqueo": m.get("unlock_at"), "items": []}
             self.indice["modulos"].append(ficha)
-            try:
-                items = self.api.items_modulo(self.cid, m["id"])
-            except requests.HTTPError:
+            if items is None:
                 continue
             for it in items:
                 tipo = it.get("type")
@@ -265,7 +279,8 @@ class _SyncCurso:
                             prev = self.estado["archivos"].get(str(fid))
                             item["ruta"] = prev and prev.get("ruta")
                     elif tipo == "Page":
-                        pag = _get_json(self.api, f"/api/v1/courses/{self.cid}/pages/{it['page_url']}")
+                        pag = self._paginas.get(it["page_url"]) or _get_json(
+                            self.api, f"/api/v1/courses/{self.cid}/pages/{it['page_url']}")
                         titulo = pag.get("title") or it.get("title") or "pagina"
                         rel = (subdir / f"{limpiar(titulo)}.html").as_posix()
                         self.snapshot(f"page:{pag.get('page_id') or it['page_url']}", rel,
@@ -276,6 +291,39 @@ class _SyncCurso:
                         item["url"] = it.get("external_url")
                 except (requests.HTTPError, KeyError) as e:
                     self.resumen["errores"].append(f"ítem '{it.get('title')}': {e}")
+
+    def _precargar(self, mods, meta_por_id):
+        """Pide en paralelo los ítems de cada módulo y luego los metadatos de
+        archivos y páginas que hagan falta. Los errores se dejan para el
+        recorrido normal, que los reporta."""
+        def items(m):
+            try:
+                return self.api.items_modulo(self.cid, m["id"])
+            except requests.HTTPError:
+                return None
+
+        def meta(fid):
+            try:
+                return fid, _meta_archivo(self.api, self.cid, fid)
+            except requests.RequestException:
+                return fid, None
+
+        def pagina(url):
+            try:
+                return url, _get_json(self.api, f"/api/v1/courses/{self.cid}/pages/{url}")
+            except requests.RequestException:
+                return url, None
+
+        with ThreadPoolExecutor(HILOS) as ex:
+            por_modulo = list(ex.map(items, mods))
+            todos = [it for its in por_modulo if its for it in its]
+            fids = {it.get("content_id") for it in todos
+                    if it.get("type") == "File" and it.get("content_id") not in meta_por_id}
+            urls = {it["page_url"] for it in todos if it.get("type") == "Page" and it.get("page_url")}
+            self._estado(f"revisando {len(fids)} archivos y {len(urls)} páginas…")
+            self._metas.update((f, m) for f, m in ex.map(meta, fids) if m)
+            self._paginas.update((u, p) for u, p in ex.map(pagina, urls) if p)
+        return por_modulo
 
     def archivos_tab(self, meta_por_id, carpetas):
         """Archivos de la pestaña Archivos que no aparecen en ningún módulo."""
@@ -315,10 +363,16 @@ class _SyncCurso:
                 pass  # pestaña Archivos oculta: se resuelve archivo por archivo
         if "modulos" in self.fuentes:
             self.modulos(meta_por_id)
+            self._limpiar_estado()
         if "archivos" in self.fuentes:
             self.archivos_tab(meta_por_id, carpetas)
         if "tareas" in self.fuentes:
+            self._estado("revisando tareas…")
             self.tareas()
+            self._limpiar_estado()
+        r = self.resumen
+        self.log(f"  → {len(r['nuevos'])} nuevos, {len(r['actualizados'])} actualizados, "
+                 f"{r['sin_cambios']} sin cambios")
         if not self.dry_run:
             self.escribir_syllabus()
             self.manifest.guardar()
