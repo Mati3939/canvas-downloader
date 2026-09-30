@@ -47,6 +47,30 @@ def revisar_claude_md(cfg, cursos, raiz, log, crear):
             log(f"    - {n}")
 
 
+def elegir_evaluacion(cfg, cursos, log, forzado=False):
+    """Lee el calendario y devuelve la evaluación más cercana entre `cursos`.
+    Si el calendario falla, avisa y devuelve None sin romper lo anterior."""
+    from calendar_reader import imprimir_proximas, proximas_evaluaciones
+    try:
+        proximas, sin_asociar = proximas_evaluaciones(cfg, log)
+    except ErrorFatal as e:
+        log(f"\n✗ Calendario: {e}")
+        return None
+    imprimir_proximas(cfg, proximas, sin_asociar, log)
+    ids = {c["canvas_course_id"] for c in cursos}
+    candidatas = sorted((e for cid, e in proximas.items() if cid in ids), key=lambda e: e.inicio)
+    if not candidatas:
+        if forzado:
+            c = cursos[0]
+            motivo = ("eres ayudante en ese ramo" if c["rol"] != "estudiante"
+                      else f"no tiene evaluaciones en los próximos {cfg.get('dias_horizonte', 30)} días")
+            log(f"\n{c['nombre']}: {motivo}. No hay nada que preparar.")
+        else:
+            log("\nNo hay evaluaciones próximas. No hay nada que preparar.")
+        return None
+    return candidatas[0]
+
+
 def main(argv=None):
     args = parsear_args(argv)
     log = Log()
@@ -70,7 +94,13 @@ def main(argv=None):
 
         if args.solo_sync:
             return 0
-        log("\n(Calendario, temario y guía: pendientes de implementar en las etapas 3 a 5.)")
+
+        evaluacion = elegir_evaluacion(cfg, cursos, log, forzado=bool(args.curso))
+        if evaluacion is None:
+            return 0
+        log(f"\n→ Ramo elegido: {evaluacion.curso['nombre']} — {evaluacion.nombre_corto} "
+            f"({evaluacion.cuando()})")
+        log("\n(Temario y guía: pendientes de implementar en las etapas 4 y 5.)")
         return 0
     except ErrorFatal as e:
         log(f"\n✗ {e}")

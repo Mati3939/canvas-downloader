@@ -71,10 +71,12 @@ def normalizar(texto):
 
 
 def buscar_curso(cfg, texto):
-    """Cursos de config cuyo nombre o carpeta contiene `texto` (sin tildes)."""
+    """Cursos de config cuyo nombre o carpeta contiene `texto`, o que tienen
+    `texto` entre sus palabras de calendario (sin tildes)."""
     q = normalizar(texto)
     return [c for c in cfg["cursos"]
-            if q in normalizar(c["nombre"]) or q in normalizar(c["carpeta"])]
+            if q in normalizar(c["nombre"]) or q in normalizar(c["carpeta"])
+            or q in [normalizar(p) for p in c.get("palabras_calendario", [])]]
 
 
 def limpiar(nombre):

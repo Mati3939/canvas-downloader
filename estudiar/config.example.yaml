@@ -13,6 +13,8 @@ cursos:
   # ... un bloque por ramo
 
 evaluacion_keywords: ["control", "certamen", "examen", "prueba", "evaluación", "solemne", "test"]
+# Eventos de evaluación que no corresponden a ningún ramo de la lista.
+calendario_ignorar: []
 dias_horizonte: 30
 max_archivos_por_generacion: 15
 
