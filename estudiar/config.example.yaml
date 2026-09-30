@@ -7,10 +7,14 @@ semestre: "Semestre 1"
 cursos:
   - nombre: "Cálculo I"
     canvas_course_id: 12345
+    carpeta_referencia: "Cálculo I"   # subcarpeta de referencias_estilo (opcional)
     carpeta: "Cálculo I"              # nombre de la carpeta en DRIVE_ROOT/<semestre>/
     palabras_calendario: ["cálculo", "calculo"]
     rol: estudiante                   # estudiante | ayudante (ayudante: solo se sincroniza)
   # ... un bloque por ramo
+
+# Carpeta con guías anteriores que sirven de referencia de estilo (opcional).
+referencias_estilo: ''
 
 evaluacion_keywords: ["control", "certamen", "examen", "prueba", "evaluación", "solemne", "test"]
 # Eventos de evaluación que no corresponden a ningún ramo de la lista.
@@ -25,4 +29,5 @@ canvas:
 claude:
   comando: "claude"
   modelo_temario: "sonnet"
+  # modelo_guia: "opus"
   timeout_segundos: 1800

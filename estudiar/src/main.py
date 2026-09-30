@@ -101,8 +101,10 @@ def main(argv=None):
             temario = preparar_temario(cfg, ev.curso, ev, raiz, log, dry_run=args.dry_run)
             if temario["estado"] == "saltado":
                 continue
-            if temario["estado"] in ("confirmado", "editado"):
-                log("\n(Generación de la guía: pendiente de implementar en la etapa 5.)")
+            if temario["estado"] in ("confirmado", "editado", "dry_run"):
+                from generate import generar_guia
+                generar_guia(cfg, ev.curso, ev, raiz, log, temario_path=temario["ruta"],
+                             dry_run=args.dry_run)
             break
         else:
             if candidatas:
