@@ -265,6 +265,9 @@ def preparar_temario(cfg, curso, ev, raiz, log, dry_run=False):
     'estado', 'ruta' e 'incidencias'."""
     dir_curso = carpeta_curso(raiz, cfg, curso)
     destino = ruta_temario(dir_curso, ev)
+    if dry_run and destino.exists():
+        log(f"  (dry-run) Ya existe {destino.relative_to(dir_curso).as_posix()}: se reutilizaría.")
+        return {"estado": "dry_run", "ruta": destino, "incidencias": []}
     if dry_run:
         prompt, docs = armar_prompt(cfg, curso, ev, dir_curso)
         log(f"  (dry-run) Se generaría {destino.relative_to(dir_curso).as_posix()} "
