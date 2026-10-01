@@ -70,6 +70,27 @@ def elegir_evaluaciones(cfg, cursos, log, forzado=False):
     return candidatas
 
 
+def escribir_registros(cfg, cursos, raiz, resultados, trabajados, log):
+    """Una entrada en registro.md por cada ramo que esta ejecución tocó: el de la
+    evaluación (o los saltados) y los que recibieron archivos nuevos."""
+    import registro
+    for c in cursos:
+        sync = (resultados or {}).get(c["nombre"])
+        datos = trabajados.get(c["nombre"])
+        hubo_cambios = sync and (sync["nuevos"] or sync["actualizados"] or sync["errores"])
+        if not datos and not hubo_cambios:
+            continue
+        datos = datos or {}
+        dir_curso = carpeta_curso(raiz, cfg, c)
+        entrada = registro.armar_entrada(dir_curso, ev=datos.get("ev"), sync=sync,
+                                         temario=datos.get("temario"), guia=datos.get("guia"))
+        try:
+            registro.agregar(dir_curso, c["nombre"], entrada)
+            log(f"  + registro.md actualizado: {c['nombre']}")
+        except OSError as e:
+            log(f"  ⚠ No pude escribir registro.md de {c['nombre']}: {e}")
+
+
 def main(argv=None):
     args = parsear_args(argv)
     log = Log()
@@ -83,6 +104,7 @@ def main(argv=None):
         if args.dry_run:
             log("Modo dry-run: no se descarga ni se escribe nada.")
 
+        resultados = None
         if not args.sin_descarga:
             from canvas_sync import MANIFEST_FILE, imprimir_resumen, sincronizar
             resultados = sincronizar(cfg, cursos, raiz, log, dry_run=args.dry_run,
@@ -91,24 +113,28 @@ def main(argv=None):
 
         revisar_claude_md(cfg, cursos, raiz, log, crear=not args.dry_run)
 
-        if args.solo_sync:
-            return 0
+        trabajados = {}  # nombre del curso -> datos para su entrada de registro.md
+        if not args.solo_sync:
+            candidatas = elegir_evaluaciones(cfg, cursos, log, forzado=bool(args.curso))
+            from syllabus import preparar_temario
+            for ev in candidatas:
+                log(f"\n→ {ev.curso['nombre']} — {ev.nombre_corto} ({ev.cuando()})")
+                temario = preparar_temario(cfg, ev.curso, ev, raiz, log, dry_run=args.dry_run)
+                datos = trabajados.setdefault(ev.curso["nombre"], {"curso": ev.curso})
+                datos.update(ev=ev, temario=temario)
+                if temario["estado"] == "saltado":
+                    continue
+                if temario["estado"] in ("confirmado", "editado", "dry_run"):
+                    from generate import generar_guia
+                    datos["guia"] = generar_guia(cfg, ev.curso, ev, raiz, log,
+                                                 temario_path=temario["ruta"], dry_run=args.dry_run)
+                break
+            else:
+                if candidatas:
+                    log("\nNo quedan más ramos con evaluaciones próximas.")
 
-        candidatas = elegir_evaluaciones(cfg, cursos, log, forzado=bool(args.curso))
-        from syllabus import preparar_temario
-        for ev in candidatas:
-            log(f"\n→ {ev.curso['nombre']} — {ev.nombre_corto} ({ev.cuando()})")
-            temario = preparar_temario(cfg, ev.curso, ev, raiz, log, dry_run=args.dry_run)
-            if temario["estado"] == "saltado":
-                continue
-            if temario["estado"] in ("confirmado", "editado", "dry_run"):
-                from generate import generar_guia
-                generar_guia(cfg, ev.curso, ev, raiz, log, temario_path=temario["ruta"],
-                             dry_run=args.dry_run)
-            break
-        else:
-            if candidatas:
-                log("\nNo quedan más ramos con evaluaciones próximas.")
+        if not args.dry_run:
+            escribir_registros(cfg, cursos, raiz, resultados, trabajados, log)
         return 0
     except ErrorFatal as e:
         log(f"\n✗ {e}")

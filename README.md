@@ -51,6 +51,12 @@ Abre el navegador en `http://127.0.0.1:8765/` con:
 - Log de progreso en vivo con resumen final (nuevos / ya existían / errores).
 - Tema claro y oscuro.
 
+## Guías de estudio (estudiar/)
+
+La carpeta [`estudiar/`](estudiar/README.md) agrega un flujo de un clic sobre este
+descargador: sincroniza solo lo nuevo hacia una carpeta de Google Drive, detecta la
+próxima evaluación en tu calendario y genera una guía de estudio en PDF con Claude Code.
+
 ## Acceso directo en Windows
 
 Para abrirlo con un clic, sin consola ni editor:
