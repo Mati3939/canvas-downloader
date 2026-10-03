@@ -50,6 +50,7 @@ Abre el navegador en `http://127.0.0.1:8765/` con:
 - Carpeta destino configurable y opción de **organizar por término académico** (`destino/término/curso/…`).
 - Log de progreso en vivo con resumen final (nuevos / ya existían / errores).
 - Tema claro y oscuro.
+- El botón **Sincronizar ramos** aparece cuando `estudiar` está configurado y ejecuta su sync incremental hacia la carpeta de Drive (ver [`estudiar/README.md`](estudiar/README.md)).
 
 ## Guías de estudio (estudiar/)
 

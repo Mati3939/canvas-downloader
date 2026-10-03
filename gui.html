@@ -313,6 +313,8 @@
     text-align: center; font-size: 0.8rem; color: var(--muted);
     margin-top: 0.5rem; font-variant-numeric: tabular-nums;
   }
+  #btn-sync { width: 100%; margin-top: 0.9rem; padding: 0.6rem; }
+  .sync-ayuda { text-align: center; font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
 
   /* ---- Progreso ---- */
   .progreso-head { display: flex; align-items: center; gap: 0.6rem; margin: 1.2rem 0 0.5rem; }
@@ -433,6 +435,9 @@
       <button id="btn-descargar" disabled>Descargar selección</button>
       <div id="contador-sel">0 cursos seleccionados</div>
 
+      <button class="btn-sec" id="btn-sync" disabled>⟳ Sincronizar ramos</button>
+      <div id="sync-ayuda" class="sync-ayuda">Baja lo nuevo de tus ramos a la carpeta de Drive</div>
+
       <div class="progreso-head">
         <p class="rotulo">Progreso</p>
         <span class="pill" id="estado-pill">Inactivo</span>
@@ -456,6 +461,7 @@
   //          modChecked:{id:bool}, courseChecked, indeterminate, _chkEl, _detEl }
   var courseState = {};
   var descargaActiva = false;
+  var syncDisponible = false;
   var pollTimer = null;
   var pollDesde = 0;
 
@@ -535,6 +541,11 @@
         mostrarAvisoConfig();
         return;
       }
+      var sync = r.data.sync || {};
+      syncDisponible = !!sync.ok;
+      $("sync-ayuda").textContent = sync.ok
+        ? "Baja lo nuevo de tus ramos a " + sync.carpeta
+        : "No disponible: " + (sync.motivo || "estudiar no está configurado");
       $("layout").style.display = "grid";
       await cargarPrefs();
       await cargarCursos(false);
@@ -1100,6 +1111,7 @@
   function actualizarBotonDescarga() {
     var n = buildSeleccion().length;
     $("btn-descargar").disabled = descargaActiva || n === 0;
+    $("btn-sync").disabled = descargaActiva || !syncDisponible;
   }
 
   // ---------------------------------------------------------------------
@@ -1126,7 +1138,7 @@
   function setPill(estado) {
     var pill = $("estado-pill");
     pill.className = "pill" + (estado === "activo" ? " activo" : estado === "listo" ? " listo" : "");
-    pill.textContent = estado === "activo" ? "Descargando…" : estado === "listo" ? "Completado" : "Inactivo";
+    pill.textContent = estado === "activo" ? "En curso…" : estado === "listo" ? "Completado" : "Inactivo";
   }
 
   $("btn-descargar").addEventListener("click", async function () {
@@ -1168,6 +1180,31 @@
       descargaActiva = false;
       setPill("inactivo");
       actualizarBotonDescarga();
+    }
+  });
+
+  $("btn-sync").addEventListener("click", async function () {
+    descargaActiva = true;
+    actualizarBotonDescarga();
+    setPill("activo");
+    $("log").textContent = "";
+    $("resumen").style.display = "none";
+    try {
+      var r = await fetchJSON("/api/sincronizar", { method: "POST" });
+      if (r.status === 409) {
+        mostrarError("Ya hay una descarga o sincronización en curso.");
+        iniciarPolling();
+        return;
+      }
+      if (!r.ok || !r.data || !r.data.ok) {
+        mostrarError((r.data && r.data.error) || "No se pudo iniciar la sincronización.");
+        descargaActiva = false; setPill("inactivo"); actualizarBotonDescarga();
+        return;
+      }
+      iniciarPolling();
+    } catch (err) {
+      mostrarError("Error de conexión al iniciar la sincronización: " + err);
+      descargaActiva = false; setPill("inactivo"); actualizarBotonDescarga();
     }
   });
 
