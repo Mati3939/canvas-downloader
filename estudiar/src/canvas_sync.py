@@ -111,6 +111,35 @@ def _descargar(api, url, destino):
     raise ultimo
 
 
+def _fecha_titulo(iso, titulo, defecto):
+    """'AAAA-MM-DD - título' válido como nombre de carpeta en Windows."""
+    fecha = (iso or "")[:10] or "sin fecha"
+    return f"{fecha} - {limpiar((titulo or '').strip() or defecto)[:80].rstrip('. ')}"
+
+
+def _aplanar(mensajes):
+    """Mensajes de una conversación más los reenviados dentro de ellos."""
+    salida = []
+    for m in mensajes or []:
+        salida.append(m)
+        salida.extend(_aplanar(m.get("forwarded_messages")))
+    return salida
+
+
+def html_conversacion(conv, detalle):
+    """Cuerpo HTML del hilo, en orden cronológico. Los mensajes de Canvas son
+    texto plano: se escapan y los saltos de línea pasan a <br>."""
+    nombres = {p.get("id"): p.get("name")
+               for p in (detalle.get("participants") or conv.get("participants") or [])}
+    partes = []
+    for m in sorted(_aplanar(detalle.get("messages")), key=lambda m: m.get("created_at") or ""):
+        autor = _html.escape(nombres.get(m.get("author_id")) or f"usuario {m.get('author_id')}")
+        fecha = _html.escape((m.get("created_at") or "")[:16].replace("T", " "))
+        cuerpo = _html.escape(m.get("body") or "").replace("\n", "<br>\n")
+        partes.append(f"<section><p><b>{autor}</b> — {fecha}</p><p>{cuerpo}</p></section><hr>")
+    return "\n".join(partes)
+
+
 # ---------------------------------------------------------------- manifest
 
 class Manifest:
@@ -125,6 +154,7 @@ class Manifest:
         c = self.datos["cursos"].setdefault(str(cid), {})
         c.setdefault("archivos", {})
         c.setdefault("paginas", {})
+        c.setdefault("mensajes", {})
         return c
 
     def guardar(self):
@@ -149,7 +179,8 @@ class _SyncCurso:
         self.rutas_usadas = {}   # ruta relativa -> file id (esta ejecución)
         self.resumen = {"nuevos": [], "actualizados": [], "sin_cambios": 0,
                         "omitidos": [], "errores": []}
-        self.indice = {"modulos": [], "tareas": [], "archivos_sueltos": []}
+        self.indice = {"modulos": [], "tareas": [], "archivos_sueltos": [],
+                      "anuncios": [], "mensajes": []}
         self._metas = {}     # file id -> metadatos precargados
         self._paginas = {}   # page_url -> página precargada
 
@@ -351,6 +382,122 @@ class _SyncCurso:
                           t.get("name") or tname, t.get("description"), t.get("updated_at"))
             self.archivos_embebidos(t.get("description"), subdir, f"Tarea: {t.get('name')}")
 
+    # ---- anuncios
+
+    def _topics_anuncios(self):
+        return self.api.discusiones(self.cid, solo_anuncios=True)
+
+    def anuncios(self):
+        try:
+            topics = self._topics_anuncios()
+        except requests.HTTPError:
+            self.log("  (sin Anuncios accesibles)")
+            return
+        for t in topics:
+            titulo = t.get("title") or "anuncio"
+            subdir = Path("Anuncios") / _fecha_titulo(t.get("posted_at"), titulo, "anuncio")
+            rel = (subdir / "anuncio.html").as_posix()
+            contexto = f"Anuncio: {titulo}"
+            self.snapshot(f"announcement:{t['id']}", rel, titulo, t.get("message"),
+                          t.get("updated_at") or t.get("posted_at"))
+            adjuntos = [r for att in (t.get("attachments") or [])
+                        if (r := self.archivo(att["id"], att, subdir, contexto))]
+            self.archivos_embebidos(t.get("message"), subdir, contexto)
+            self.indice["anuncios"].append({"titulo": titulo, "fecha": t.get("posted_at"),
+                                            "ruta": rel if t.get("message") else None,
+                                            "adjuntos": adjuntos})
+
+    # ---- mensajes (bandeja de entrada de Canvas)
+
+    def _staff(self):
+        """Ids de profes y ayudantes del ramo, o None si Canvas no los entrega."""
+        try:
+            usuarios = self.api._paginar(f"{self.api.base}/api/v1/courses/{self.cid}/users",
+                                         {"enrollment_type[]": ["teacher", "ta"]})
+        except requests.RequestException:
+            return None
+        return {u["id"] for u in usuarios}
+
+    def _conversaciones(self):
+        vistas, salida = set(), []
+        for scope in ("inbox", "archived"):
+            for c in self.api._paginar(f"{self.api.base}/api/v1/conversations",
+                                       {"scope": scope, "filter[]": f"course_{self.cid}"}):
+                if c["id"] not in vistas:
+                    vistas.add(c["id"])
+                    salida.append(c)
+        return salida
+
+    def _detalle(self, c):
+        """Hilo completo. auto_mark_as_read=false: leerlo no lo marca como leído."""
+        try:
+            return _get_json(self.api, f"/api/v1/conversations/{c['id']}?auto_mark_as_read=false")
+        except requests.RequestException:
+            return None
+
+    def mensajes(self):
+        staff = self._staff()
+        if staff is None:
+            self.log("  (sin lista de profes del ramo: no se revisan mensajes)")
+            return
+        try:
+            convs = self._conversaciones()
+        except requests.HTTPError:
+            self.log("  (sin Mensajes accesibles)")
+            return
+        guardados = self.estado["mensajes"]
+        pendientes = []
+        for c in convs:
+            previo = guardados.get(str(c["id"]))
+            if previo and previo.get("last_message_at") == c.get("last_message_at"):
+                if previo.get("ignorada"):
+                    continue
+                if (self.dir_canvas / previo["indice"]["ruta"]).exists():
+                    self.indice["mensajes"].append(previo["indice"])
+                    self.resumen["sin_cambios"] += len(previo["indice"].get("adjuntos", []))
+                    continue
+            pendientes.append(c)
+        if pendientes:
+            self._estado(f"leyendo {len(pendientes)} conversaciones…")
+            with ThreadPoolExecutor(HILOS) as ex:
+                detalles = list(ex.map(self._detalle, pendientes))
+        else:
+            detalles = []
+        for c, d in zip(pendientes, detalles):
+            asunto = (c.get("subject") or "").strip() or "sin asunto"
+            if d is None:
+                self.resumen["errores"].append(f"mensaje '{asunto}': no se pudo leer")
+                continue
+            msgs = _aplanar(d.get("messages"))
+            clave = str(c["id"])
+            if not any(m.get("author_id") in staff for m in msgs):
+                if not self.dry_run:
+                    guardados[clave] = {"ignorada": True, "last_message_at": c.get("last_message_at")}
+                continue
+            primero = min((m.get("created_at") or "" for m in msgs), default="")
+            previo = guardados.get(clave) or {}
+            carpeta = previo.get("carpeta") or (
+                Path("Mensajes") / _fecha_titulo(primero, asunto, "sin asunto")).as_posix()
+            contexto = f"Mensaje: {asunto}"
+            rel = f"{carpeta}/mensaje.html"
+            self.snapshot(f"conversation:{c['id']}", rel, asunto, html_conversacion(c, d),
+                          c.get("last_message_at"))
+            ids, rutas = [], []
+            for m in msgs:
+                for att in m.get("attachments") or []:
+                    ids.append(att["id"])
+                    r = self.archivo(att["id"], att, carpeta, contexto)
+                    if r:
+                        rutas.append(r)
+                self.archivos_embebidos(m.get("body"), carpeta, contexto)
+            indice = {"asunto": asunto, "fecha": c.get("last_message_at"), "ruta": rel,
+                      "adjuntos": rutas}
+            self.indice["mensajes"].append(indice)
+            if not self.dry_run:
+                guardados[clave] = {"carpeta": carpeta, "adjuntos": ids, "indice": indice,
+                                    "last_message_at": c.get("last_message_at")}
+                self.manifest.guardar()
+
     # ---- orquestación
 
     def ejecutar(self):
@@ -369,6 +516,14 @@ class _SyncCurso:
         if "tareas" in self.fuentes:
             self._estado("revisando tareas…")
             self.tareas()
+            self._limpiar_estado()
+        if "anuncios" in self.fuentes:
+            self._estado("revisando anuncios…")
+            self.anuncios()
+            self._limpiar_estado()
+        if "mensajes" in self.fuentes:
+            self._estado("revisando mensajes…")
+            self.mensajes()
             self._limpiar_estado()
         r = self.resumen
         self.log(f"  → {len(r['nuevos'])} nuevos, {len(r['actualizados'])} actualizados, "
@@ -410,6 +565,22 @@ class _SyncCurso:
             orden = sorted(self.indice["tareas"], key=lambda t: t.get("entrega") or "9999")
             for t in orden:
                 lineas.append(f"- {fecha(t.get('entrega'))} — {t['nombre']}")
+            lineas.append("")
+        def recientes(items):
+            return sorted(items, key=lambda x: x.get("fecha") or "", reverse=True)
+
+        if self.indice["anuncios"]:
+            lineas += ["## Anuncios", ""]
+            for a in recientes(self.indice["anuncios"]):
+                ruta = f" — `{a['ruta']}`" if a.get("ruta") else ""
+                lineas.append(f"- {fecha(a.get('fecha'))} — {a['titulo']}{ruta}")
+                lineas += [f"  - `{r}`" for r in a.get("adjuntos", [])]
+            lineas.append("")
+        if self.indice["mensajes"]:
+            lineas += ["## Mensajes de profes", ""]
+            for m in recientes(self.indice["mensajes"]):
+                lineas.append(f"- {fecha(m.get('fecha'))} — {m['asunto']} — `{m['ruta']}`")
+                lineas += [f"  - `{r}`" for r in m.get("adjuntos", [])]
             lineas.append("")
         if self.indice["archivos_sueltos"]:
             lineas += ["## Archivos fuera de módulos", ""]

@@ -23,8 +23,11 @@ dias_horizonte: 30
 max_archivos_por_generacion: 15
 
 canvas:
-  # Fuentes a sincronizar: modulos, archivos, tareas
-  fuentes: ["modulos", "archivos", "tareas"]
+  # Fuentes a sincronizar: modulos, archivos, tareas, anuncios, mensajes
+  # (mensajes = bandeja de entrada de Canvas, solo hilos con profes o ayudantes del ramo)
+  fuentes: ["modulos", "archivos", "tareas", "anuncios", "mensajes"]
+  # Fuentes a omitir aunque estén en la lista, p. ej. ["mensajes"]
+  excluir: []
 
 claude:
   comando: "claude"

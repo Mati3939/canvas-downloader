@@ -44,6 +44,10 @@ def leer_env():
     return valores
 
 
+FUENTES_DEFAULT = ("modulos", "archivos", "tareas", "anuncios", "mensajes")
+_FUENTES_NUEVAS = ("anuncios", "mensajes")
+
+
 def cargar_config():
     import yaml
     if not CONFIG_FILE.exists():
@@ -60,7 +64,11 @@ def cargar_config():
         c.setdefault("rol", "estudiante")
         c.setdefault("palabras_calendario", [])
     cfg.setdefault("semestre", "")
-    cfg.setdefault("canvas", {}).setdefault("fuentes", ["modulos", "archivos", "tareas"])
+    canvas = cfg.setdefault("canvas", {})
+    fuentes = list(canvas.get("fuentes") or FUENTES_DEFAULT)
+    fuentes += [f for f in _FUENTES_NUEVAS if f not in fuentes]
+    excluir = set(canvas.get("excluir") or [])
+    canvas["fuentes"] = [f for f in fuentes if f not in excluir]
     return cfg
 
 

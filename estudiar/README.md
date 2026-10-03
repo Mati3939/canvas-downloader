@@ -2,7 +2,9 @@
 
 Flujo de un clic que usa el descargador de Canvas como base:
 
-1. Sincroniza de Canvas **solo los archivos nuevos o modificados** de tus ramos.
+1. Sincroniza de Canvas **solo los archivos nuevos o modificados** de tus ramos, además
+   de los anuncios y los mensajes de la bandeja de entrada enviados por profes o
+   ayudantes del ramo (con sus adjuntos, sin marcarlos como leídos).
 2. Los deja en una carpeta local sincronizada con Google Drive para escritorio.
 3. Lee tu Google Calendar (dirección iCal) y detecta la **próxima evaluación** de cada ramo.
 4. Arma un **temario tentativo** y te lo muestra para que lo confirmes o edites.
@@ -65,6 +67,8 @@ o quitar líneas antes de confirmar.
 ├── registro.md    # historial de ejecuciones (lo escribe el programa)
 ├── syllabus.md    # índice de módulos, archivos y tareas de Canvas
 ├── canvas/        # material descargado, ordenado por módulo
+│   ├── Anuncios/  # anuncios del ramo
+│   └── Mensajes/  # hilos con profes o ayudantes
 ├── temario/       # temarios tentativos
 └── guias/         # guías en PDF (y su .tex)
 ```
@@ -75,6 +79,12 @@ o quitar líneas antes de confirmar.
 - La guía es lo que más consume, porque Claude lee los PDFs del material. Se controla
   con `max_archivos_por_generacion` y `claude.modelo_guia` en `config.yaml`.
 - Se genera como máximo una guía por ejecución.
+
+## Desde la app
+
+El botón **Sincronizar ramos** de la app del descargador hace lo mismo que
+`estudiar.bat --solo-sync`. La app necesita PyYAML instalado en el Python con el que
+se abre: `python -m pip install pyyaml`.
 
 ## Usarlo desde otro dispositivo
 
