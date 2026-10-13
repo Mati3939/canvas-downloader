@@ -12,7 +12,8 @@ USO:
 
 Abre automáticamente el navegador en http://127.0.0.1:8765/ (o el puerto que
 haya quedado libre si ese estaba ocupado). El botón "Sincronizar ramos" lanza,
-si `estudiar` está configurado, el sync incremental hacia la carpeta de Drive.
+si ramos.yaml y DRIVE_ROOT están configurados, el sync incremental hacia la
+carpeta de Drive (sync_ramos.py).
 """
 import os
 import sys
@@ -37,40 +38,29 @@ HERE = Path(__file__).resolve().parent
 GUI_HTML = HERE / "gui.html"
 PREFS_FILE = HERE / "canvas_gui_prefs.json"   # preferencias (ocultos/orden) por usuario
 PUERTO_PREFERIDO = 8765
-ESTUDIAR_SRC = HERE / "estudiar" / "src"
-
-
-def _estudiar():
-    """Módulos de estudiar (sync hacia Drive). Se importan recién al usarlos:
-    la descarga manual funciona aunque estudiar no esté configurado."""
-    if str(ESTUDIAR_SRC) not in sys.path:
-        sys.path.insert(0, str(ESTUDIAR_SRC))
-    import utils
-    import canvas_sync
-    import main as estudiar_main
-    return utils, canvas_sync, estudiar_main
 
 
 def _preparar_sync(escribir):
-    """(cfg, raiz) listos para sincronizar, o ErrorFatal/ImportError con el motivo."""
-    utils, _, _ = _estudiar()
-    cfg = utils.cargar_config()
-    raiz = utils.resolver_drive_root(utils.leer_env())
-    utils.verificar_drive_root(raiz, escribir=escribir)
+    """(cfg, raiz) listos para sincronizar, o ErrorFatal/ImportError con el motivo.
+    sync_ramos usa PyYAML, que se importa recién acá: la descarga manual funciona
+    aunque el sync no esté configurado."""
+    import sync_ramos
+    cfg = sync_ramos.cargar_config()
+    raiz = sync_ramos.resolver_drive_root(sync_ramos.leer_env())
+    sync_ramos.verificar_drive_root(raiz, escribir=escribir)
     return cfg, raiz
 
 
 def _estado_sync():
     try:
-        utils, _, _ = _estudiar()
         cfg, raiz = _preparar_sync(escribir=False)
     except ImportError as e:
         if getattr(e, "name", "") == "yaml":
             motivo = "Falta PyYAML: python -m pip install pyyaml"
         else:
-            motivo = f"No se pudo cargar estudiar: {e}"
+            motivo = f"No se pudo cargar el sync: {e}"
         return {"ok": False, "motivo": motivo, "carpeta": None}
-    except Exception as e:  # ErrorFatal de estudiar: falta config.yaml, DRIVE_ROOT, etc.
+    except Exception as e:  # ErrorFatal del sync: falta ramos.yaml, DRIVE_ROOT, etc.
         return {"ok": False, "motivo": str(e).splitlines()[0], "carpeta": None}
     return {"ok": True, "motivo": None, "carpeta": str(Path(raiz) / cfg["semestre"])}
 
@@ -257,27 +247,23 @@ def _ejecutar_sync():
     errores = nuevos = sin_cambios = 0
     try:
         try:
-            utils, canvas_sync, estudiar_main = _estudiar()
+            import sync_ramos
             cfg, raiz = _preparar_sync(escribir=True)
         except Exception as e:
             _log(f"✗ {e}")
             _resumen = {"nuevos": 0, "saltados": 0, "errores": 1}
             return
-        log_archivo = utils.Log()
 
         def log(msg=""):
-            log_archivo(msg)                # consola + logs/ del día, sanitizado
-            _log(utils.sanitizar(msg))
+            _log(sync_ramos.sanitizar(msg))
 
         _dest_actual = str(Path(raiz) / cfg["semestre"])
         log(f"Carpeta de ramos: {_dest_actual}")
-        manifest = os.environ.get("ESTUDIAR_MANIFEST") or canvas_sync.MANIFEST_FILE
+        manifest = os.environ.get("SYNC_MANIFEST") or sync_ramos.MANIFEST_FILE
         try:
-            resultados = canvas_sync.sincronizar(cfg, cfg["cursos"], raiz, log,
-                                                 manifest_path=manifest)
-            canvas_sync.imprimir_resumen(resultados, log)
-            estudiar_main.revisar_claude_md(cfg, cfg["cursos"], raiz, log, crear=True)
-            estudiar_main.escribir_registros(cfg, cfg["cursos"], raiz, resultados, {}, log)
+            resultados = sync_ramos.sincronizar(cfg, cfg["cursos"], raiz, log,
+                                                manifest_path=manifest)
+            sync_ramos.imprimir_resumen(resultados, log)
         except Exception as e:
             log(f"✗ {e}")
             errores += 1

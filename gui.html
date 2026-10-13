@@ -545,7 +545,7 @@
       syncDisponible = !!sync.ok;
       $("sync-ayuda").textContent = sync.ok
         ? "Baja lo nuevo de tus ramos a " + sync.carpeta
-        : "No disponible: " + (sync.motivo || "estudiar no está configurado");
+        : "No disponible: " + (sync.motivo || "el sync no está configurado");
       $("layout").style.display = "grid";
       await cargarPrefs();
       await cargarCursos(false);

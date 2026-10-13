@@ -1,15 +1,14 @@
-"""Tests de las fuentes anuncios y mensajes del sync (sin red)."""
+"""Tests del sync de ramos: anuncios, mensajes y config (sin red)."""
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import utils  # noqa: E402
-import canvas_sync  # noqa: E402
-from canvas_sync import Manifest, _SyncCurso, _fecha_titulo, html_conversacion  # noqa: E402
+import sync_ramos  # noqa: E402
+from sync_ramos import Manifest, _SyncCurso, _fecha_titulo, html_conversacion  # noqa: E402
 
 STAFF = 10
 ALUMNO = 20
@@ -180,19 +179,19 @@ class TestSyllabus(unittest.TestCase):
 
 class TestConfig(unittest.TestCase):
     def _cargar(self, yaml_texto):
-        tmp = Path(tempfile.mkdtemp()) / "config.yaml"
+        tmp = Path(tempfile.mkdtemp()) / "ramos.yaml"
         tmp.write_text(yaml_texto, encoding="utf-8")
-        with mock.patch.object(utils, "CONFIG_FILE", tmp):
-            return utils.cargar_config()
+        with mock.patch.object(sync_ramos, "CONFIG_FILE", tmp):
+            return sync_ramos.cargar_config()
 
     BASE = 'cursos:\n  - {nombre: R, canvas_course_id: 1, carpeta: R}\n'
 
     def test_default_incluye_nuevas(self):
-        self.assertEqual(self._cargar(self.BASE)["canvas"]["fuentes"], list(utils.FUENTES_DEFAULT))
+        self.assertEqual(self._cargar(self.BASE)["canvas"]["fuentes"], list(sync_ramos.FUENTES_DEFAULT))
 
-    def test_lista_explicita_recibe_nuevas(self):
+    def test_lista_explicita(self):
         cfg = self._cargar(self.BASE + 'canvas:\n  fuentes: ["modulos"]\n')
-        self.assertEqual(cfg["canvas"]["fuentes"], ["modulos", "anuncios", "mensajes"])
+        self.assertEqual(cfg["canvas"]["fuentes"], ["modulos"])
 
     def test_excluir(self):
         cfg = self._cargar(self.BASE + 'canvas:\n  excluir: ["mensajes"]\n')

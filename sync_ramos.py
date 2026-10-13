@@ -1,14 +1,18 @@
-"""Sincronización incremental de Canvas hacia la carpeta de Drive.
+"""Sincronización incremental de Canvas hacia la carpeta de Drive (botón
+"Sincronizar ramos" de la GUI).
 
 Usa la clase `Canvas` del núcleo (canvas_descargar.py) solo para leer la API.
 Lo propio de este módulo:
   - manifest (id + modified_at + tamaño) para bajar solo lo nuevo o cambiado;
   - reintentos con backoff ante rate limit (429 / 403 throttle), 5xx y red;
   - destino <DRIVE_ROOT>/<semestre>/<Curso>/canvas/, ordenado por módulo;
+  - ramos y fuentes definidos en ramos.yaml (ver ramos.example.yaml);
   - syllabus.md con módulos, ítems y fechas de las tareas.
 Todas las llamadas a la API son GET.
 """
 import os
+import json
+import functools
 import re
 import sys
 import time
@@ -21,9 +25,138 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from utils import (STATE_DIR, ErrorFatal, carpeta_curso, escribir_si_cambia,
-                   guardar_json_atomico, leer_env, limpiar)
-from canvas_descargar import Canvas
+from canvas_descargar import Canvas, _leer_dotenv, limpiar as _limpiar_nucleo
+
+REPO = Path(__file__).resolve().parent
+CONFIG_FILE = REPO / "ramos.yaml"
+STATE_DIR = REPO / "sync_estado"
+DOTENV_FILE = REPO / ".env"
+
+
+class ErrorFatal(Exception):
+    """Error que detiene el sync con un mensaje claro para el usuario."""
+
+
+# ---------------------------------------------------------------- configuración
+
+def leer_env():
+    """Variables del .env del repo; las variables de entorno tienen prioridad."""
+    valores = _leer_dotenv(DOTENV_FILE)
+    for clave in ("CANVAS_BASE_URL", "CANVAS_URL", "CANVAS_TOKEN", "DRIVE_ROOT"):
+        if os.environ.get(clave):
+            valores[clave] = os.environ[clave]
+    return valores
+
+
+FUENTES_DEFAULT = ("modulos", "archivos", "tareas", "anuncios", "mensajes")
+
+
+def cargar_config():
+    import yaml
+    if not CONFIG_FILE.exists():
+        raise ErrorFatal(f"No existe {CONFIG_FILE.name}. Copia ramos.example.yaml "
+                         "como ramos.yaml y completa tus ramos.")
+    cfg = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8")) or {}
+    cursos = cfg.get("cursos") or []
+    if not cursos:
+        raise ErrorFatal(f"{CONFIG_FILE.name} no tiene cursos.")
+    for c in cursos:
+        for campo in ("nombre", "canvas_course_id", "carpeta"):
+            if not c.get(campo):
+                raise ErrorFatal(f"Un curso de {CONFIG_FILE.name} no tiene '{campo}': {c}")
+    cfg.setdefault("semestre", "")
+    canvas = cfg.setdefault("canvas", {})
+    fuentes = list(canvas.get("fuentes") or FUENTES_DEFAULT)
+    excluir = set(canvas.get("excluir") or [])
+    canvas["fuentes"] = [f for f in fuentes if f not in excluir]
+    return cfg
+
+
+def limpiar(nombre):
+    """Nombre válido en Windows (el núcleo no quita puntos ni espacios finales)."""
+    return _limpiar_nucleo(nombre).rstrip(". ") or "sin_nombre"
+
+
+# ---------------------------------------------------------------- logging
+
+_URL_CON_QUERY = re.compile(r"(https?://[^\s?\"'<>]+)\?[^\s\"'<>]*")
+_BEARER = re.compile(r"(Bearer\s+)\S+", re.I)
+
+
+def sanitizar(texto):
+    """Quita de un mensaje lo que puede ser secreto: parámetros de URLs (los
+    enlaces de descarga de Canvas llevan un `verifier`) y tokens."""
+    t = str(texto)
+    t = _URL_CON_QUERY.sub(r"\1?…", t)
+    t = _BEARER.sub(r"\1…", t)
+    for secreto in _secretos():
+        t = t.replace(secreto, "…")
+    return t
+
+
+@functools.lru_cache(maxsize=1)
+def _secretos():
+    token = leer_env().get("CANVAS_TOKEN")
+    return (token,) if token and len(token) > 8 else ()
+
+
+# ---------------------------------------------------------------- archivos
+
+def guardar_json_atomico(path, datos):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(datos, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def escribir_si_cambia(path, texto):
+    """Escribe el archivo solo si el contenido cambió. Devuelve True si escribió."""
+    path = Path(path)
+    if path.exists():
+        try:
+            if path.read_text(encoding="utf-8") == texto:
+                return False
+        except (OSError, UnicodeDecodeError):
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(texto, encoding="utf-8")
+    return True
+
+
+# ---------------------------------------------------------------- Drive
+
+def resolver_drive_root(env, override=None):
+    ruta = override or env.get("DRIVE_ROOT")
+    if not ruta:
+        raise ErrorFatal("Falta DRIVE_ROOT en el .env (carpeta sincronizada con Google Drive).")
+    return Path(ruta)
+
+
+def verificar_drive_root(raiz, escribir=True):
+    """Comprueba que la carpeta de Drive existe y se puede escribir. Nunca se
+    escribe en otro lugar si esto falla."""
+    raiz = Path(raiz)
+    if not raiz.is_dir():
+        raise ErrorFatal(
+            f"No encuentro la carpeta de Drive: {raiz}\n"
+            "  ¿Está abierto Google Drive para escritorio y montada la unidad?")
+    if escribir:
+        prueba = raiz / f".sync_prueba_{os.getpid()}"
+        try:
+            prueba.write_text("ok", encoding="utf-8")
+            prueba.unlink()
+        except OSError as e:
+            raise ErrorFatal(f"No puedo escribir en {raiz}: {e}\n"
+                             "  Revisa que Google Drive esté corriendo y con sesión iniciada.")
+
+
+def carpeta_curso(raiz, cfg, curso):
+    base = Path(raiz)
+    if cfg.get("semestre"):
+        base = base / limpiar(cfg["semestre"])
+    return base / limpiar(curso["carpeta"])
+
 
 MANIFEST_FILE = STATE_DIR / "manifest.json"
 REINTENTOS = 5

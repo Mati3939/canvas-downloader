@@ -1,0 +1,18 @@
+# Copia este archivo como ramos.yaml y completa tus ramos.
+# ramos.yaml no se versiona. DRIVE_ROOT (carpeta de Drive) va en el .env.
+
+# Subcarpeta de DRIVE_ROOT donde viven los ramos de este semestre.
+semestre: "Semestre 1"
+
+cursos:
+  - nombre: "Cálculo I"
+    canvas_course_id: 12345
+    carpeta: "Cálculo I"              # nombre de la carpeta en DRIVE_ROOT/<semestre>/
+  # ... un bloque por ramo
+
+canvas:
+  # Fuentes a sincronizar: modulos, archivos, tareas, anuncios, mensajes
+  # (mensajes = bandeja de entrada de Canvas, solo hilos con profes o ayudantes del ramo)
+  fuentes: ["modulos", "archivos", "tareas", "anuncios", "mensajes"]
+  # Fuentes a omitir aunque estén en la lista, p. ej. ["mensajes"]
+  excluir: []

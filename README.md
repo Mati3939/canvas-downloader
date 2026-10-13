@@ -50,13 +50,23 @@ Abre el navegador en `http://127.0.0.1:8765/` con:
 - Carpeta destino configurable y opción de **organizar por término académico** (`destino/término/curso/…`).
 - Log de progreso en vivo con resumen final (nuevos / ya existían / errores).
 - Tema claro y oscuro.
-- El botón **Sincronizar ramos** aparece cuando `estudiar` está configurado y ejecuta su sync incremental hacia la carpeta de Drive (ver [`estudiar/README.md`](estudiar/README.md)).
+- El botón **Sincronizar ramos** baja solo lo nuevo de tus ramos hacia una carpeta de Google Drive (ver abajo).
 
-## Guías de estudio (estudiar/)
+## Sincronizar ramos
 
-La carpeta [`estudiar/`](estudiar/README.md) agrega un flujo de un clic sobre este
-descargador: sincroniza solo lo nuevo hacia una carpeta de Google Drive, detecta la
-próxima evaluación en tu calendario y genera una guía de estudio en PDF con Claude Code.
+El botón **Sincronizar ramos** de la GUI (`sync_ramos.py`) mantiene una copia
+incremental de cada ramo del semestre en una carpeta sincronizada con Google Drive:
+módulos, archivos, tareas, anuncios y mensajes de profes, más un `syllabus.md`
+por ramo. Solo baja lo nuevo o modificado (lleva un manifest en `sync_estado/`).
+
+Para activarlo:
+
+1. Instala PyYAML: `pip install pyyaml`.
+2. Agrega `DRIVE_ROOT` al `.env` con la ruta de tu carpeta de Drive para escritorio.
+3. Copia `ramos.example.yaml` como `ramos.yaml` y completa el semestre y tus ramos
+   (id del curso en Canvas y nombre de la carpeta).
+
+Los archivos quedan en `DRIVE_ROOT/<semestre>/<carpeta del ramo>/canvas/`.
 
 ## Acceso directo en Windows
 
