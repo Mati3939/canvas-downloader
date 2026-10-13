@@ -68,6 +68,23 @@ Para activarlo:
 
 Los archivos quedan en `DRIVE_ROOT/<semestre>/<carpeta del ramo>/canvas/`.
 
+## Escanear apuntes
+
+El botón **Escanear apuntes** de la GUI abre `/escanear` en otra pestaña: usa una
+cámara (o el celular como webcam) para detectar sola una hoja de cuaderno,
+esperar que esté encuadrada, quieta y enfocada, y capturarla sin tocar nada.
+Al terminar la sesión arma un PDF y lo deja en
+`DRIVE_ROOT/<semestre>/<carpeta del ramo>/Apuntes/`.
+
+Para activarlo, instala las dependencias de visión:
+
+```
+pip install opencv-python-headless img2pdf
+```
+
+Necesita además `ramos.yaml` y `DRIVE_ROOT` configurados (ver "Sincronizar
+ramos" arriba) y una cámara disponible para el navegador.
+
 ## Acceso directo en Windows
 
 Para abrirlo con un clic, sin consola ni editor:

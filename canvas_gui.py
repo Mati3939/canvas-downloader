@@ -22,7 +22,7 @@ import threading
 import webbrowser
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit, parse_qs
+from urllib.parse import urlsplit, parse_qs, unquote
 
 from canvas_descargar import cargar_config, Canvas, descargar_curso, limpiar, DEFAULT_DEST
 
@@ -36,8 +36,10 @@ for _stream in (sys.stdout, sys.stderr):
 
 HERE = Path(__file__).resolve().parent
 GUI_HTML = HERE / "gui.html"
+ESCANEAR_HTML = HERE / "escanear.html"
 PREFS_FILE = HERE / "canvas_gui_prefs.json"   # preferencias (ocultos/orden) por usuario
 PUERTO_PREFERIDO = 8765
+LIMITE_CUERPO_ESCANEO = 40 * 1024 * 1024   # 40 MB, para /api/escaneo/analizar y /capturar
 
 
 def _preparar_sync(escribir):
@@ -81,6 +83,21 @@ _log_lock = threading.Lock()
 _log_lineas = []
 _resumen = None
 _dest_actual = ""              # se completa recién cuando arranca una descarga
+
+_escaneo = None                # instancia perezosa de escaneo_sesion.GestorEscaneo
+_escaneo_lock = threading.Lock()
+
+
+def _gestor_escaneo():
+    """GestorEscaneo perezoso: importa escaneo_sesion (que a su vez importa
+    cv2/numpy/img2pdf de forma perezosa) recién cuando hace falta, para que
+    la GUI arranque sin esas dependencias instaladas."""
+    global _escaneo
+    with _escaneo_lock:
+        if _escaneo is None:
+            import escaneo_sesion
+            _escaneo = escaneo_sesion.GestorEscaneo()
+        return _escaneo
 
 
 def _try_cargar_config():
@@ -303,6 +320,31 @@ class CanvasGUIHandler(BaseHTTPRequestHandler):
         crudo = self.rfile.read(largo) if largo else b"{}"
         return json.loads(crudo.decode("utf-8") or "{}")
 
+    def _body_binaria(self):
+        """Cuerpo crudo (JPEG) con tope de 40 MB. None si ya se respondió un
+        413: el caller debe cortar ahí sin seguir procesando la request."""
+        largo = int(self.headers.get("Content-Length", 0) or 0)
+        if largo > LIMITE_CUERPO_ESCANEO:
+            self.close_connection = True  # no drenamos el cuerpo: cerramos la conexión
+            self._send_json({"error": "Imagen demasiado grande (máximo 40 MB)."}, 413)
+            return None
+        return self.rfile.read(largo) if largo else b""
+
+    def _responder_escaneo(self, func, *args, **kwargs):
+        """Ejecuta un método de GestorEscaneo y manda el resultado como JSON.
+        ErrorEscaneo define el status; cualquier otra excepción es un 500
+        sin tumbar el servidor."""
+        import escaneo_sesion
+        try:
+            resultado = func(*args, **kwargs)
+        except escaneo_sesion.ErrorEscaneo as e:
+            self._send_json({"error": e.mensaje}, e.status)
+            return
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+            return
+        self._send_json(resultado if resultado is not None else {"ok": True})
+
     def log_message(self, fmt, *args):
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
@@ -314,6 +356,8 @@ class CanvasGUIHandler(BaseHTTPRequestHandler):
         try:
             if ruta == "/" or ruta == "/index.html":
                 self._get_index()
+            elif ruta == "/escanear":
+                self._get_escanear()
             elif ruta == "/api/estado":
                 self._get_estado()
             elif ruta == "/api/cursos":
@@ -326,6 +370,10 @@ class CanvasGUIHandler(BaseHTTPRequestHandler):
                 self._send_json(_leer_prefs())
             elif ruta == "/api/progreso":
                 self._get_progreso(qs)
+            elif ruta == "/api/escaneo/estado":
+                self._responder_escaneo(_gestor_escaneo().estado)
+            elif ruta.startswith("/api/escaneo/pagina/"):
+                self._get_escaneo_pagina(unquote(ruta[len("/api/escaneo/pagina/"):]))
             else:
                 self._send_json({"error": "no encontrado"}, 404)
         except Exception as e:
@@ -333,6 +381,7 @@ class CanvasGUIHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         ruta = urlsplit(self.path).path
+        qs = parse_qs(urlsplit(self.path).query)
         try:
             if ruta == "/api/descargar":
                 self._post_descargar()
@@ -341,6 +390,38 @@ class CanvasGUIHandler(BaseHTTPRequestHandler):
             elif ruta == "/api/prefs":
                 _guardar_prefs(self._body_json())
                 self._send_json({"ok": True})
+            elif ruta == "/api/escaneo/sesion":
+                datos = self._body_json()
+                self._responder_escaneo(_gestor_escaneo().iniciar, datos.get("ramo"), datos.get("titulo"))
+            elif ruta == "/api/escaneo/analizar":
+                cuerpo = self._body_binaria()
+                if cuerpo is not None:
+                    self._responder_escaneo(_gestor_escaneo().analizar, cuerpo)
+            elif ruta == "/api/escaneo/capturar":
+                forzar = qs.get("forzar", ["0"])[0] == "1"
+                cuerpo = self._body_binaria()
+                if cuerpo is not None:
+                    self._responder_escaneo(_gestor_escaneo().capturar, cuerpo, forzar)
+            elif ruta == "/api/escaneo/terminar":
+                datos = self._body_json()
+                self._responder_escaneo(_gestor_escaneo().terminar, datos.get("titulo"))
+            elif ruta == "/api/escaneo/cancelar":
+                self._body_json()  # sin parámetros, pero hay que drenar el cuerpo si lo hay
+                self._responder_escaneo(_gestor_escaneo().cancelar)
+            elif ruta == "/api/escaneo/abrir_carpeta":
+                self._body_json()  # ídem
+                self._responder_escaneo(_gestor_escaneo().abrir_carpeta)
+            else:
+                self._send_json({"error": "no encontrado"}, 404)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def do_DELETE(self):
+        ruta = urlsplit(self.path).path
+        try:
+            if ruta.startswith("/api/escaneo/pagina/"):
+                id_ = unquote(ruta[len("/api/escaneo/pagina/"):])
+                self._responder_escaneo(_gestor_escaneo().borrar, id_)
             else:
                 self._send_json({"error": "no encontrado"}, 404)
         except Exception as e:
@@ -352,6 +433,28 @@ class CanvasGUIHandler(BaseHTTPRequestHandler):
             self._send_html("<h1>Falta gui.html</h1>", 500)
             return
         self._send_html(GUI_HTML.read_text(encoding="utf-8"))
+
+    def _get_escanear(self):
+        if not ESCANEAR_HTML.exists():
+            self._send_html("<h1>Falta escanear.html</h1>", 500)
+            return
+        self._send_html(ESCANEAR_HTML.read_text(encoding="utf-8"))
+
+    def _get_escaneo_pagina(self, id_):
+        import escaneo_sesion
+        try:
+            datos = _gestor_escaneo().pagina_jpeg(id_)
+        except escaneo_sesion.ErrorEscaneo as e:
+            self._send_json({"error": e.mensaje}, e.status)
+            return
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(datos)))
+        self.end_headers()
+        self.wfile.write(datos)
 
     def _get_estado(self):
         cfg = _try_cargar_config()
