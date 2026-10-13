@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escanear apuntes</title>
+<style>
+  /* ---- Tokens: copiados de gui.html para que se vea de la misma familia ---- */
+  :root {
+    --bg: #f6f3ed;
+    --panel: #fffdf9;
+    --panel-2: #efeae1;
+    --inset: #f1ece3;
+    --border: #ddd5c7;
+    --border-strong: #c9bfae;
+    --text: #2b2620;
+    --muted: #7a7263;
+    --accent: #b25e2a;
+    --accent-contrast: #ffffff;
+    --accent-soft: rgba(178, 94, 42, 0.10);
+    --accent-border: rgba(178, 94, 42, 0.45);
+    --ok: #3d8a5f;
+    --danger: #b3402e;
+    --danger-soft: rgba(179, 64, 46, 0.10);
+    --console-bg: #241f18;
+    --console-text: #d8cfbe;
+    --banda-texto: rgba(255, 255, 255, 0.92);
+    --shadow: 0 1px 2px rgba(43, 38, 32, 0.06), 0 4px 16px rgba(43, 38, 32, 0.05);
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16130f;
+      --panel: #1e1a15;
+      --panel-2: #272219;
+      --inset: #14110d;
+      --border: #363023;
+      --border-strong: #4a4232;
+      --text: #ece5d8;
+      --muted: #a2977f;
+      --accent: #e09b52;
+      --accent-contrast: #241a0e;
+      --accent-soft: rgba(224, 155, 82, 0.12);
+      --accent-border: rgba(224, 155, 82, 0.5);
+      --ok: #6fc492;
+      --danger: #e5705c;
+      --danger-soft: rgba(229, 112, 92, 0.12);
+      --console-bg: #100d09;
+      --console-text: #cfc5ae;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f3ed; --panel: #fffdf9; --panel-2: #efeae1; --inset: #f1ece3;
+    --border: #ddd5c7; --border-strong: #c9bfae; --text: #2b2620; --muted: #7a7263;
+    --accent: #b25e2a; --accent-contrast: #ffffff;
+    --accent-soft: rgba(178, 94, 42, 0.10); --accent-border: rgba(178, 94, 42, 0.45);
+    --ok: #3d8a5f; --danger: #b3402e; --danger-soft: rgba(179, 64, 46, 0.10);
+    --console-bg: #241f18; --console-text: #d8cfbe;
+    --shadow: 0 1px 2px rgba(43, 38, 32, 0.06), 0 4px 16px rgba(43, 38, 32, 0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #16130f; --panel: #1e1a15; --panel-2: #272219; --inset: #14110d;
+    --border: #363023; --border-strong: #4a4232; --text: #ece5d8; --muted: #a2977f;
+    --accent: #e09b52; --accent-contrast: #241a0e;
+    --accent-soft: rgba(224, 155, 82, 0.12); --accent-border: rgba(224, 155, 82, 0.5);
+    --ok: #6fc492; --danger: #e5705c; --danger-soft: rgba(229, 112, 92, 0.12);
+    --console-bg: #100d09; --console-text: #cfc5ae;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  button { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { max-width: 980px; margin: 0 auto; padding: 1.4rem 1.5rem 3rem; }
+
+  /* ---- Cabecera (igual que gui.html) ---- */
+  header {
+    display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+    padding-bottom: 1rem; margin-bottom: 1.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .titulo h1 {
+    font-family: var(--serif);
+    font-size: 1.7rem; font-weight: 600; margin: 0;
+    letter-spacing: 0.01em;
+    text-wrap: balance;
+  }
+  .titulo .sub { color: var(--muted); font-size: 0.85rem; margin-top: 0.15rem; }
+  .header-acciones { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+  .btn-sec {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 7px;
+    padding: 0.4rem 0.8rem; font-size: 0.82rem; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center;
+  }
+  .btn-sec:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sec:disabled { opacity: 0.5; cursor: default; }
+
+  .btn-primario {
+    padding: 0.7rem 1.1rem; border-radius: 9px; border: none;
+    background: var(--accent); color: var(--accent-contrast);
+    font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .btn-primario:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn-primario:disabled { background: var(--panel-2); color: var(--muted); cursor: not-allowed; }
+
+  /* ---- Avisos (igual que gui.html) ---- */
+  #error-banner {
+    display: none;
+    background: var(--danger-soft);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 0.65rem 1rem; border-radius: 8px;
+    margin-bottom: 1rem; font-size: 0.88rem;
+  }
+  #error-banner button {
+    float: right; background: none; border: none; color: inherit;
+    cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0 0 0.6rem;
+  }
+  .aviso {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 1.2rem 1.4rem; line-height: 1.6;
+    max-width: 46rem;
+  }
+  .aviso h2 { font-family: var(--serif); margin: 0 0 0.6rem; font-size: 1.15rem; }
+  .aviso p { white-space: pre-wrap; }
+  .aviso code { background: var(--panel-2); padding: 0.12em 0.4em; border-radius: 4px; font-family: var(--mono); font-size: 0.85em; }
+  .aviso pre { background: var(--panel-2); padding: 0.8rem; border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 0.8em; white-space: pre-wrap; word-break: break-word; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.15rem 1.2rem;
+    box-shadow: var(--shadow);
+  }
+  .panel > h2 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 1.15rem; margin: 0 0 0.9rem;
+  }
+  .rotulo {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--muted);
+    margin: 0 0 0.4rem;
+  }
+
+  /* ---- Pantallas ---- */
+  .pantalla { display: none; }
+  .pantalla.activa { display: block; }
+
+  /* ---- Config ---- */
+  #pantalla-config .panel { max-width: 30rem; margin: 0 auto; }
+  .campo { margin-bottom: 1.1rem; }
+  .campo-entrada {
+    display: block; width: 100%;
+    padding: 0.5rem 0.7rem; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--text); font-size: 0.88rem; font-family: var(--sans);
+  }
+  .campo-entrada::placeholder { color: var(--muted); }
+  .campo-ayuda { color: var(--muted); font-size: 0.76rem; margin-top: 0.3rem; }
+  .campo-ayuda.alerta { color: var(--danger); }
+
+  /* ---- Escaneo ---- */
+  .info-sesion {
+    display: flex; gap: 1.2rem; flex-wrap: wrap;
+    font-size: 0.85rem; color: var(--muted); margin-bottom: 0.8rem;
+  }
+  .info-sesion b { color: var(--text); }
+
+  .video-wrap {
+    position: relative; width: 100%; background: #000;
+    border-radius: 12px; overflow: hidden;
+    aspect-ratio: 4 / 3;
+  }
+  .video-wrap video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  .video-wrap canvas#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .destello { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+
+  .pastilla-estado {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border-strong); border-radius: 999px;
+    padding: 0.5rem 1.2rem; font-size: 0.95rem; font-weight: 600; color: var(--text);
+    box-shadow: var(--shadow); white-space: nowrap; max-width: 92%; overflow: hidden;
+    text-overflow: ellipsis; display: flex; align-items: center; gap: 0.5rem;
+  }
+  .pastilla-estado::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .pastilla-estado[data-estado="listo"] { color: var(--ok); border-color: var(--ok); }
+  .pastilla-estado[data-estado="listo"]::before { background: var(--ok); }
+  .pastilla-estado[data-estado="encuadre"], .pastilla-estado[data-estado="quieto"], .pastilla-estado[data-estado="desenfocado"] {
+    color: var(--accent); border-color: var(--accent-border);
+  }
+  .pastilla-estado[data-estado="encuadre"]::before, .pastilla-estado[data-estado="quieto"]::before, .pastilla-estado[data-estado="desenfocado"]::before {
+    background: var(--accent);
+  }
+  .pastilla-estado[data-estado="sinconexion"] { color: var(--danger); border-color: var(--danger); }
+  .pastilla-estado[data-estado="sinconexion"]::before { background: var(--danger); }
+
+  .ayuda-teclado { text-align: center; font-size: 0.76rem; color: var(--muted); margin: 0.5rem 0 1rem; }
+
+  .miniaturas-barra { margin-bottom: 1rem; }
+  .miniaturas-contador { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.4rem; }
+  .miniaturas-lista {
+    display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.3rem 0.1rem;
+  }
+  .miniaturas-lista:empty::before {
+    content: "Todavía no capturaste ninguna página.";
+    color: var(--muted); font-size: 0.82rem;
+  }
+  .miniatura {
+    position: relative; flex: 0 0 auto; width: 72px; height: 96px;
+    border-radius: 6px; overflow: hidden; border: 1px solid var(--border);
+    cursor: pointer; background: var(--panel-2);
+  }
+  .miniatura img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .miniatura-borrar {
+    position: absolute; top: 2px; right: 2px; background: rgba(0, 0, 0, 0.55);
+    color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px;
+    line-height: 16px; font-size: 0.75rem; cursor: pointer; padding: 0;
+  }
+
+  .acciones-escaneo { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .acciones-escaneo .btn-primario { flex: 1 1 auto; }
+
+  /* ---- Resultado ---- */
+  #pantalla-resultado .panel { max-width: 32rem; margin: 0 auto; }
+  #resultado-ruta {
+    background: var(--panel-2); padding: 0.7rem 0.9rem; border-radius: 8px;
+    font-family: var(--mono); font-size: 0.82rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  .acciones-resultado { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.9rem; }
+
+  /* ---- Visor ampliado ---- */
+  #visor-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.78);
+    align-items: center; justify-content: center; padding: 2rem; z-index: 50;
+    cursor: zoom-out;
+  }
+  #visor-overlay img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+
+  @media (max-width: 640px) {
+    .app { padding: 1rem 1rem 2rem; }
+    .video-wrap { aspect-ratio: 3 / 4; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="titulo">
+      <h1>Escanear apuntes</h1>
+      <div class="sub">Acercá la hoja a la cámara: la app la encuadra, la enfoca y la captura sola.</div>
+    </div>
+    <div class="header-acciones">
+      <a class="btn-sec" href="/">← Volver</a>
+      <button class="btn-sec" id="btn-tema" title="Cambiar tema claro/oscuro">◐ Tema</button>
+    </div>
+  </header>
+
+  <div id="error-banner"><button id="cerrar-error" title="cerrar">&times;</button><span id="error-texto"></span></div>
+
+  <section class="pantalla activa" id="pantalla-cargando">
+    <div class="panel" style="max-width:30rem;margin:0 auto;text-align:center;color:var(--muted);">
+      Cargando…
+    </div>
+  </section>
+
+  <section class="pantalla" id="pantalla-no-disponible">
+    <div class="aviso">
+      <h2>El escáner no está disponible</h2>
+      <p id="no-disponible-motivo"></p>
+    </div>
+  </section>
+
+  <section class="pantalla" id="pantalla-config">
+    <div class="panel">
+      <h2>Empezar una sesión</h2>
+
+      <div class="campo">
+        <p class="rotulo">Ramo</p>
+        <select class="campo-entrada" id="sel-ramo"></select>
+      </div>
+
+      <div class="campo">
+        <p class="rotulo">Cámara</p>
+        <select class="campo-entrada" id="sel-camara"></select>
+        <div class="campo-ayuda" id="camara-ayuda"></div>
+      </div>
+
+      <div class="campo">
+        <p class="rotulo">Título (opcional)</p>
+        <input type="text" class="campo-entrada" id="input-titulo" placeholder="Apuntes AAAA-MM-DD">
+      </div>
+
+      <button class="btn-primario" id="btn-empezar" style="width:100%">Empezar</button>
+    </div>
+  </section>
+
+  <section class="pantalla" id="pantalla-escaneo">
+    <div class="info-sesion">
+      <span>Ramo: <b id="info-ramo"></b></span>
+      <span>Título: <b id="info-titulo"></b></span>
+    </div>
+
+    <div class="video-wrap" id="video-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div class="destello" id="destello"></div>
+      <div class="pastilla-estado" id="pastilla" data-estado="sin_hoja">Iniciando la cámara…</div>
+    </div>
+    <p class="ayuda-teclado">Espacio = capturar igual · Retroceso = borrar la última página</p>
+
+    <div class="miniaturas-barra">
+      <div class="miniaturas-contador" id="miniaturas-contador">0 páginas</div>
+      <div class="miniaturas-lista" id="miniaturas-lista"></div>
+    </div>
+
+    <div class="acciones-escaneo">
+      <button class="btn-primario" id="btn-terminar">Terminar</button>
+      <button class="btn-sec" id="btn-cancelar">Cancelar</button>
+    </div>
+  </section>
+
+  <section class="pantalla" id="pantalla-resultado">
+    <div class="panel">
+      <h2>Listo</h2>
+      <p>El PDF quedó guardado acá:</p>
+      <pre id="resultado-ruta"></pre>
+      <div class="acciones-resultado">
+        <button class="btn-primario" id="btn-abrir-carpeta">Abrir carpeta</button>
+        <button class="btn-sec" id="btn-nueva-sesion">Nueva sesión</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="visor-overlay">
+  <img id="visor-img" alt="Página ampliada">
+</div>
+
+<canvas id="canvas-analisis" style="display:none"></canvas>
+<canvas id="canvas-captura" style="display:none"></canvas>
+
+<script>
+(function () {
+  "use strict";
+
+  function $(id) { return document.getElementById(id); }
+
+  // ---------------------------------------------------------------------
+  // Tema claro/oscuro (misma clave que gui.html para compartir preferencia)
+  // ---------------------------------------------------------------------
+  var temaGuardado = null;
+  try { temaGuardado = localStorage.getItem("canvas-gui-tema"); } catch (e) {}
+  if (temaGuardado === "light" || temaGuardado === "dark") {
+    document.documentElement.dataset.theme = temaGuardado;
+  }
+  $("btn-tema").addEventListener("click", function () {
+    var actual = document.documentElement.dataset.theme;
+    if (!actual) {
+      actual = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    var nuevo = actual === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nuevo;
+    try { localStorage.setItem("canvas-gui-tema", nuevo); } catch (e) {}
+  });
+
+  function mostrarError(msg) {
+    $("error-texto").textContent = msg;
+    $("error-banner").style.display = "block";
+  }
+  $("cerrar-error").addEventListener("click", function () {
+    $("error-banner").style.display = "none";
+  });
+
+  function mostrarPantalla(id) {
+    document.querySelectorAll(".pantalla").forEach(function (el) {
+      el.classList.toggle("activa", el.id === id);
+    });
+  }
+
+  function pantallaActivaId() {
+    var el = document.querySelector(".pantalla.activa");
+    return el ? el.id : null;
+  }
+
+  // ---------------------------------------------------------------------
+  // Llamadas a la API
+  // ---------------------------------------------------------------------
+  async function llamarJSON(url, opts) {
+    var resp = await fetch(url, opts);
+    var datos = null;
+    try { datos = await resp.json(); } catch (e) { /* sin cuerpo JSON */ }
+    if (!resp.ok) {
+      throw new Error((datos && datos.error) || ("Error HTTP " + resp.status));
+    }
+    return datos;
+  }
+
+  async function llamarConBlob(url, blob) {
+    var resp = await fetch(url, { method: "POST", body: blob });
+    var datos = null;
+    try { datos = await resp.json(); } catch (e) {}
+    if (!resp.ok) {
+      throw new Error((datos && datos.error) || ("Error HTTP " + resp.status));
+    }
+    return datos;
+  }
+
+  // ---------------------------------------------------------------------
+  // Estado global de la sesión
+  // ---------------------------------------------------------------------
+  var ramoSesionActual = null;
+  var tituloSesionActual = null;
+  var paginas = [];           // [{id, miniatura}]
+
+  var stream = null;
+  var analizarEnVuelo = false;
+  var capturando = false;
+  var bucleId = null;
+  var audioCtx = null;
+  var visorUrlActual = null;
+
+  var video = $("video");
+  var overlay = $("overlay");
+  var pastilla = $("pastilla");
+  var destelloEl = $("destello");
+  var canvasAnalisis = $("canvas-analisis");
+  var canvasCaptura = $("canvas-captura");
+
+  function fechaHoy() {
+    var d = new Date();
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    var dd = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + mm + "-" + dd;
+  }
+
+  // ---------------------------------------------------------------------
+  // Carga inicial
+  // ---------------------------------------------------------------------
+  async function cargarEstado() {
+    mostrarPantalla("pantalla-cargando");
+    try {
+      var datos = await llamarJSON("/api/escaneo/estado");
+      if (!datos.disponible) {
+        $("no-disponible-motivo").textContent = datos.motivo || "Motivo desconocido.";
+        mostrarPantalla("pantalla-no-disponible");
+        return;
+      }
+      poblarSelectRamo(datos.ramos || []);
+      if (datos.sesion) {
+        ramoSesionActual = datos.sesion.ramo;
+        tituloSesionActual = datos.sesion.titulo;
+        paginas = (datos.sesion.paginas || []).slice();
+        pintarInfoSesion();
+        renderMiniaturas();
+        mostrarPantalla("pantalla-escaneo");
+        iniciarCamaraGuardada();
+      } else {
+        $("input-titulo").placeholder = "Apuntes " + fechaHoy();
+        mostrarPantalla("pantalla-config");
+        prepararSelectCamara();
+      }
+    } catch (e) {
+      mostrarError("No se pudo conectar con la aplicación: " + e.message);
+    }
+  }
+
+  function poblarSelectRamo(ramos) {
+    var sel = $("sel-ramo");
+    sel.innerHTML = "";
+    ramos.forEach(function (r) {
+      var op = document.createElement("option");
+      op.value = r.nombre;
+      op.textContent = r.nombre;
+      sel.appendChild(op);
+    });
+  }
+
+  function pintarInfoSesion() {
+    $("info-ramo").textContent = ramoSesionActual || "";
+    $("info-titulo").textContent = tituloSesionActual || "";
+  }
+
+  // ---------------------------------------------------------------------
+  // Selección de cámara
+  // ---------------------------------------------------------------------
+  function mostrarAyudaCamara(msg, esAlerta) {
+    var el = $("camara-ayuda");
+    el.textContent = msg || "";
+    el.classList.toggle("alerta", !!esAlerta);
+  }
+
+  function mensajeErrorCamara(err) {
+    var nombre = (err && err.name) || "";
+    var base;
+    if (nombre === "NotAllowedError" || nombre === "PermissionDeniedError") {
+      base = "Permiso de cámara denegado.";
+    } else if (nombre === "NotFoundError" || nombre === "DevicesNotFoundError") {
+      base = "No se encontró ninguna cámara.";
+    } else {
+      base = "No se pudo acceder a la cámara" + (nombre ? " (" + nombre + ")" : "") + ".";
+    }
+    return base + " Revisá que Camo esté abierto y conectado, y que el navegador tenga permiso para usar la cámara.";
+  }
+
+  async function prepararSelectCamara() {
+    mostrarAyudaCamara("Pidiendo permiso de cámara…", false);
+    var temporal = null;
+    try {
+      temporal = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    } catch (e) {
+      mostrarAyudaCamara(mensajeErrorCamara(e), true);
+    }
+    if (temporal) {
+      temporal.getTracks().forEach(function (t) { t.stop(); });
+    }
+    try {
+      var dispositivos = await navigator.mediaDevices.enumerateDevices();
+      var camaras = dispositivos.filter(function (d) { return d.kind === "videoinput"; });
+      poblarSelectCamara(camaras);
+      if (temporal) mostrarAyudaCamara("", false);
+    } catch (e) {
+      mostrarAyudaCamara("No se pudieron listar las cámaras: " + e.message, true);
+    }
+  }
+
+  function poblarSelectCamara(camaras) {
+    var sel = $("sel-camara");
+    sel.innerHTML = "";
+    if (!camaras.length) {
+      var op = document.createElement("option");
+      op.value = "";
+      op.textContent = "(ninguna cámara detectada)";
+      sel.appendChild(op);
+      return;
+    }
+    camaras.forEach(function (c, i) {
+      var op = document.createElement("option");
+      op.value = c.deviceId;
+      op.textContent = c.label || ("Cámara " + (i + 1));
+      sel.appendChild(op);
+    });
+    var guardada = null;
+    try { guardada = localStorage.getItem("escaner.camara"); } catch (e) {}
+    var idx = -1;
+    if (guardada) {
+      idx = camaras.findIndex(function (c) { return c.deviceId === guardada; });
+    }
+    if (idx === -1) {
+      idx = camaras.findIndex(function (c) { return /camo/i.test(c.label || ""); });
+    }
+    if (idx !== -1) sel.selectedIndex = idx;
+  }
+
+  function guardarCamaraElegida(deviceId) {
+    try { localStorage.setItem("escaner.camara", deviceId || ""); } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------------
+  // Cámara: arranque/parada
+  // ---------------------------------------------------------------------
+  async function iniciarCamara(deviceId) {
+    detenerCamara();
+    var video_constraints = deviceId
+      ? { deviceId: { exact: deviceId }, width: { ideal: 3840 }, height: { ideal: 2160 } }
+      : { width: { ideal: 3840 }, height: { ideal: 2160 } };
+    stream = await navigator.mediaDevices.getUserMedia({ video: video_constraints, audio: false });
+    video.srcObject = stream;
+    await new Promise(function (resolve) {
+      video.onloadedmetadata = function () {
+        video.play().catch(function () {});
+        resolve();
+      };
+    });
+    ajustarTamanoOverlay();
+  }
+
+  function detenerCamara() {
+    if (stream) {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      stream = null;
+    }
+    video.srcObject = null;
+  }
+
+  async function iniciarCamaraGuardada() {
+    var guardada = null;
+    try { guardada = localStorage.getItem("escaner.camara"); } catch (e) {}
+    setEstadoPastilla("sin_hoja", "Iniciando la cámara…");
+    try {
+      await iniciarCamara(guardada || null);
+      iniciarBucleAnalisis();
+    } catch (e) {
+      setEstadoPastilla("sinconexion", mensajeErrorCamara(e));
+    }
+  }
+
+  window.addEventListener("resize", ajustarTamanoOverlay);
+
+  function ajustarTamanoOverlay() {
+    var w = video.clientWidth, h = video.clientHeight;
+    if (w && h) {
+      overlay.width = w;
+      overlay.height = h;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Pastilla de estado
+  // ---------------------------------------------------------------------
+  function setEstadoPastilla(estado, mensaje) {
+    pastilla.dataset.estado = estado;
+    pastilla.textContent = mensaje;
+  }
+
+  // ---------------------------------------------------------------------
+  // Overlay: mapeo de coordenadas normalizadas respetando object-fit: contain
+  // ---------------------------------------------------------------------
+  function rectoVideoMostrado() {
+    var cw = video.clientWidth, ch = video.clientHeight;
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return { x: 0, y: 0, w: cw, h: ch };
+    var escala = Math.min(cw / vw, ch / vh);
+    var w = vw * escala, h = vh * escala;
+    return { x: (cw - w) / 2, y: (ch - h) / 2, w: w, h: h };
+  }
+
+  function colorPorEstado(estado) {
+    var estilos = getComputedStyle(document.documentElement);
+    if (estado === "listo") return estilos.getPropertyValue("--ok").trim();
+    if (estado === "encuadre" || estado === "quieto" || estado === "desenfocado") return estilos.getPropertyValue("--accent").trim();
+    return estilos.getPropertyValue("--muted").trim();
+  }
+
+  function dibujarOverlay(esquinas, estado, progreso) {
+    var ctx = overlay.getContext("2d");
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    if (!esquinas || esquinas.length !== 4) return;
+    var rect = rectoVideoMostrado();
+    var pts = esquinas.map(function (p) {
+      return [rect.x + p[0] * rect.w, rect.y + p[1] * rect.h];
+    });
+    var color = colorPorEstado(estado);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+
+    if (estado === "listo") {
+      var cx = (pts[0][0] + pts[1][0] + pts[2][0] + pts[3][0]) / 4;
+      var cy = (pts[0][1] + pts[1][1] + pts[2][1] + pts[3][1]) / 4;
+      var radio = 26;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, radio, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      var ini = -Math.PI / 2;
+      ctx.arc(cx, cy, radio, ini, ini + Math.PI * 2 * Math.min(progreso || 0, 1));
+      ctx.stroke();
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Bucle de análisis (cada 200 ms, un solo request en vuelo)
+  // ---------------------------------------------------------------------
+  function iniciarBucleAnalisis() {
+    detenerBucleAnalisis();
+    bucleId = setInterval(tickAnalisis, 200);
+  }
+
+  function detenerBucleAnalisis() {
+    if (bucleId) { clearInterval(bucleId); bucleId = null; }
+  }
+
+  function tickAnalisis() {
+    if (analizarEnVuelo) return;
+    if (!video.videoWidth || !video.videoHeight) return;
+    var ladoMayor = 640;
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var escala = ladoMayor / Math.max(vw, vh);
+    var w = Math.max(1, Math.round(vw * escala));
+    var h = Math.max(1, Math.round(vh * escala));
+    canvasAnalisis.width = w;
+    canvasAnalisis.height = h;
+    var ctx = canvasAnalisis.getContext("2d");
+    ctx.drawImage(video, 0, 0, w, h);
+    canvasAnalisis.toBlob(function (blob) {
+      if (!blob) return;
+      enviarAnalisis(blob);
+    }, "image/jpeg", 0.7);
+  }
+
+  async function enviarAnalisis(blob) {
+    analizarEnVuelo = true;
+    try {
+      var datos = await llamarConBlob("/api/escaneo/analizar", blob);
+      dibujarOverlay(datos.esquinas, datos.estado, datos.progreso);
+      setEstadoPastilla(datos.estado, datos.mensaje);
+      if (datos.capturar && !capturando) {
+        dispararCaptura(false);
+      }
+    } catch (e) {
+      setEstadoPastilla("sinconexion", "Sin conexión con la app");
+    } finally {
+      analizarEnVuelo = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Captura (automática o forzada)
+  // ---------------------------------------------------------------------
+  function destello() {
+    destelloEl.style.transition = "none";
+    destelloEl.style.opacity = "0.85";
+    requestAnimationFrame(function () {
+      destelloEl.style.transition = "opacity 150ms ease";
+      destelloEl.style.opacity = "0";
+    });
+  }
+
+  function sonidoClic() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.frequency.value = 900;
+      gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.08);
+    } catch (e) { /* sin audio no pasa nada */ }
+  }
+
+  async function dispararCaptura(forzado) {
+    if (capturando) return;
+    if (!video.videoWidth || !video.videoHeight) return;
+    capturando = true;
+    try {
+      var vw = video.videoWidth, vh = video.videoHeight;
+      canvasCaptura.width = vw;
+      canvasCaptura.height = vh;
+      canvasCaptura.getContext("2d").drawImage(video, 0, 0, vw, vh);
+      var blob = await new Promise(function (resolve) {
+        canvasCaptura.toBlob(resolve, "image/jpeg", 0.92);
+      });
+      if (!blob) return;
+      var url = "/api/escaneo/capturar?forzar=" + (forzado ? "1" : "0");
+      var datos = await llamarConBlob(url, blob);
+      paginas.push({ id: datos.id, miniatura: datos.miniatura });
+      renderMiniaturas();
+      destello();
+      sonidoClic();
+    } catch (e) {
+      mostrarError("No se pudo capturar la página: " + e.message);
+    } finally {
+      capturando = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Miniaturas
+  // ---------------------------------------------------------------------
+  function renderMiniaturas() {
+    var cont = $("miniaturas-lista");
+    cont.innerHTML = "";
+    paginas.forEach(function (p) {
+      var div = document.createElement("div");
+      div.className = "miniatura";
+      div.dataset.id = p.id;
+
+      var img = document.createElement("img");
+      img.src = p.miniatura;
+      img.alt = "Página " + p.id;
+      img.addEventListener("click", function () { verPagina(p.id); });
+
+      var btn = document.createElement("button");
+      btn.className = "miniatura-borrar";
+      btn.title = "Borrar esta página";
+      btn.textContent = "×";
+      btn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        borrarPagina(p.id);
+      });
+
+      div.appendChild(img);
+      div.appendChild(btn);
+      cont.appendChild(div);
+    });
+    var n = paginas.length;
+    $("miniaturas-contador").textContent = n + (n === 1 ? " página" : " páginas");
+  }
+
+  async function borrarPagina(id) {
+    try {
+      var resp = await fetch("/api/escaneo/pagina/" + encodeURIComponent(id), { method: "DELETE" });
+      var datos = null;
+      try { datos = await resp.json(); } catch (e) {}
+      if (!resp.ok) {
+        mostrarError((datos && datos.error) || "No se pudo borrar la página.");
+        return;
+      }
+      paginas = (datos && datos.paginas) || [];
+      renderMiniaturas();
+    } catch (e) {
+      mostrarError("Error de conexión al borrar la página: " + e.message);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Visor ampliado
+  // ---------------------------------------------------------------------
+  async function verPagina(id) {
+    try {
+      var resp = await fetch("/api/escaneo/pagina/" + encodeURIComponent(id));
+      if (!resp.ok) {
+        var datos = null;
+        try { datos = await resp.json(); } catch (e) {}
+        mostrarError((datos && datos.error) || "No se pudo abrir la página.");
+        return;
+      }
+      var blob = await resp.blob();
+      var url = URL.createObjectURL(blob);
+      visorUrlActual = url;
+      $("visor-img").src = url;
+      $("visor-overlay").style.display = "flex";
+    } catch (e) {
+      mostrarError("Error de conexión al abrir la página: " + e.message);
+    }
+  }
+
+  function cerrarVisor() {
+    $("visor-overlay").style.display = "none";
+    $("visor-img").src = "";
+    if (visorUrlActual) { URL.revokeObjectURL(visorUrlActual); visorUrlActual = null; }
+  }
+  $("visor-overlay").addEventListener("click", cerrarVisor);
+
+  // ---------------------------------------------------------------------
+  // Teclado: Espacio = captura forzada, Retroceso = borra la última
+  // ---------------------------------------------------------------------
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && $("visor-overlay").style.display === "flex") {
+      cerrarVisor();
+      return;
+    }
+    var activo = document.activeElement;
+    var enCampo = activo && /^(INPUT|SELECT|TEXTAREA)$/.test(activo.tagName);
+    if (enCampo) return;
+    if (pantallaActivaId() !== "pantalla-escaneo") return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      dispararCaptura(true);
+    } else if (e.code === "Backspace") {
+      e.preventDefault();
+      if (paginas.length) borrarPagina(paginas[paginas.length - 1].id);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Empezar sesión
+  // ---------------------------------------------------------------------
+  $("btn-empezar").addEventListener("click", async function () {
+    var ramo = $("sel-ramo").value;
+    if (!ramo) { mostrarError("Elegí un ramo."); return; }
+    var titulo = $("input-titulo").value.trim();
+    var deviceId = $("sel-camara").value || null;
+    var btn = $("btn-empezar");
+    btn.disabled = true;
+    try {
+      var datos = await llamarJSON("/api/escaneo/sesion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ramo: ramo, titulo: titulo || null }),
+      });
+      ramoSesionActual = datos.ramo;
+      tituloSesionActual = datos.titulo;
+      paginas = (datos.paginas || []).slice();
+      guardarCamaraElegida(deviceId);
+      pintarInfoSesion();
+      renderMiniaturas();
+      mostrarPantalla("pantalla-escaneo");
+      setEstadoPastilla("sin_hoja", "Iniciando la cámara…");
+      try {
+        await iniciarCamara(deviceId);
+        iniciarBucleAnalisis();
+      } catch (e) {
+        setEstadoPastilla("sinconexion", mensajeErrorCamara(e));
+      }
+    } catch (e) {
+      mostrarError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Terminar / Cancelar
+  // ---------------------------------------------------------------------
+  $("btn-terminar").addEventListener("click", async function () {
+    detenerBucleAnalisis();
+    $("btn-terminar").disabled = true;
+    $("btn-cancelar").disabled = true;
+    try {
+      var datos = await llamarJSON("/api/escaneo/terminar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titulo: tituloSesionActual || null }),
+      });
+      detenerCamara();
+      $("resultado-ruta").textContent = datos.pdf || "";
+      mostrarPantalla("pantalla-resultado");
+    } catch (e) {
+      mostrarError("No se pudo terminar la sesión: " + e.message);
+      iniciarBucleAnalisis();
+    } finally {
+      $("btn-terminar").disabled = false;
+      $("btn-cancelar").disabled = false;
+    }
+  });
+
+  $("btn-cancelar").addEventListener("click", async function () {
+    if (!confirm("¿Cancelar esta sesión? Se van a perder las páginas capturadas.")) return;
+    detenerBucleAnalisis();
+    try {
+      await llamarJSON("/api/escaneo/cancelar", { method: "POST" });
+    } catch (e) {
+      mostrarError("No se pudo cancelar en el servidor: " + e.message);
+    }
+    detenerCamara();
+    volverAConfig();
+  });
+
+  $("btn-abrir-carpeta").addEventListener("click", async function () {
+    try {
+      await llamarJSON("/api/escaneo/abrir_carpeta", { method: "POST" });
+    } catch (e) {
+      mostrarError("No se pudo abrir la carpeta: " + e.message);
+    }
+  });
+
+  $("btn-nueva-sesion").addEventListener("click", function () {
+    volverAConfig();
+  });
+
+  function volverAConfig() {
+    paginas = [];
+    ramoSesionActual = null;
+    tituloSesionActual = null;
+    renderMiniaturas();
+    cargarEstado();
+  }
+
+  cargarEstado();
+})();
+</script>
+</body>
+</html>

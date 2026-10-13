@@ -369,6 +369,7 @@
     </div>
     <div class="header-acciones">
       <button class="btn-sec" id="btn-recargar" title="Vuelve a pedir la lista de cursos a Canvas">↻ Recargar cursos</button>
+      <button class="btn-sec" id="btn-escanear" title="Abre el escáner de apuntes en otra pestaña">📷 Escanear apuntes</button>
       <button class="btn-sec" id="btn-tema" title="Cambiar tema claro/oscuro">◐ Tema</button>
     </div>
   </header>
@@ -505,6 +506,10 @@
   if (temaGuardado === "light" || temaGuardado === "dark") {
     document.documentElement.dataset.theme = temaGuardado;
   }
+  $("btn-escanear").addEventListener("click", function () {
+    window.open("/escanear", "_blank");
+  });
+
   $("btn-tema").addEventListener("click", function () {
     var actual = document.documentElement.dataset.theme;
     if (!actual) {
