@@ -107,6 +107,23 @@ class TestAnuncios(BaseSnapshotTest):
         snap = snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
         self.assertEqual(snap["announcements"], [])
 
+    def test_anuncio_con_posted_at_null_se_omite(self):
+        # Un anuncio demorado (delayed_post_at futuro) tiene posted_at null
+        # hasta que se publica; el rol ayudante lo ve igual en Canvas, pero
+        # la columna posted_at de Supabase es not null.
+        topic = {"id": 6, "title": "Pendiente", "html_url": "https://x",
+                 "message": "<p>x</p>", "attachments": [], "posted_at": None}
+        api = FakeApi(anuncios=[topic])
+        snap = snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
+        self.assertEqual(snap["announcements"], [])
+
+    def test_anuncio_sin_titulo_usa_texto_vacio(self):
+        topic = {"id": 5, "title": None, "html_url": "https://x", "message": "<p>x</p>",
+                 "attachments": [], "posted_at": "2026-09-01T10:00:00Z"}
+        api = FakeApi(anuncios=[topic])
+        snap = snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
+        self.assertEqual(snap["announcements"][0]["title"], "")
+
 
 class TestAssignments(BaseSnapshotTest):
     def test_tarea_basica(self):
@@ -138,6 +155,13 @@ class TestAssignments(BaseSnapshotTest):
         with self.assertRaises(LecturaFallida):
             snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
 
+    def test_tarea_sin_nombre_usa_texto_vacio(self):
+        t = {"id": 4, "name": None, "description": None, "due_at": None, "unlock_at": None,
+             "created_at": "2026-09-01T00:00:00Z", "html_url": f"{BASE}/courses/{CID}/assignments/4"}
+        api = FakeApi(tareas=[t])
+        snap = snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
+        self.assertEqual(snap["assignments"][0]["name"], "")
+
 
 class TestModuleItems(BaseSnapshotTest):
     def test_module_items_file_id(self):
@@ -167,6 +191,19 @@ class TestModuleItems(BaseSnapshotTest):
             "external_url": "https://ejemplo.com", "canvas_url": None,
         })
 
+    def test_modulo_sin_nombre_usa_texto_vacio(self):
+        modulos = [{"id": 1, "name": None, "position": 1, "unlock_at": None}]
+        api = FakeApi(modulos=modulos, items_por_modulo={1: []})
+        snap = snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
+        self.assertEqual(snap["modules"][0]["name"], "")
+
+    def test_item_sin_titulo_usa_texto_vacio(self):
+        modulos = [{"id": 1, "name": "M1", "position": 1, "unlock_at": None}]
+        items = [{"id": 10, "position": 1, "title": None, "type": "SubHeader"}]
+        api = FakeApi(modulos=modulos, items_por_modulo={1: items})
+        snap = snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
+        self.assertEqual(snap["module_items"][0]["title"], "")
+
 
 class TestFiles(BaseSnapshotTest):
     def test_files_desde_manifest(self):
@@ -185,6 +222,18 @@ class TestFiles(BaseSnapshotTest):
         self.assertEqual(f["course_id"], CID)
         self.assertEqual(f["size"], 10)
         self.assertEqual(f["modified_at"], "2026-09-01T10:00:00Z")
+
+    def test_entrada_sin_size_o_modified_at_se_omite(self):
+        archivos = self.manifest.curso(CID)["archivos"]
+        archivos["1"] = {"ruta": "Archivos/completo.pdf", "size": 10,
+                         "modified_at": "2026-09-01T10:00:00Z", "contexto": "ctx"}
+        archivos["2"] = {"ruta": "Archivos/sin_size.pdf", "size": None,
+                         "modified_at": "2026-09-01T10:00:00Z", "contexto": "ctx"}
+        archivos["3"] = {"ruta": "Archivos/sin_fecha.pdf", "size": 5,
+                         "modified_at": None, "contexto": "ctx"}
+        api = FakeApi()
+        snap = snapshot_curso(api, self.manifest, self.curso_cfg, BASE)
+        self.assertEqual([f["canvas_id"] for f in snap["files"]], [1])
 
     def test_source_por_prefijo(self):
         archivos = self.manifest.curso(CID)["archivos"]

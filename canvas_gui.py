@@ -293,8 +293,9 @@ def _ejecutar_sync():
             # Config de Supabase presente: la corrida completa del
             # trabajador (sync + publicación) reemplaza al sync solo.
             import worker.run as worker_run
+            manifest = os.environ.get("SYNC_MANIFEST")
             try:
-                resultados = worker_run.correr(log=log)
+                resultados = worker_run.correr(log=log, manifest_path=manifest)
             except Exception as e:
                 log(f"✗ {e}")
                 _resumen = {"nuevos": 0, "saltados": 0, "errores": 1}

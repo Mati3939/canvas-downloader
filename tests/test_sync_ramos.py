@@ -1,4 +1,5 @@
 """Tests del sync de ramos: anuncios, mensajes y config (sin red)."""
+import os
 import sys
 import tempfile
 import unittest
@@ -84,6 +85,18 @@ class TestAyudantes(unittest.TestCase):
         self.assertIn("Hola<br>", h)
         self.assertIn("Profe", h)
         self.assertIn("Alumno", h)
+
+
+class TestEstadoTerminal(unittest.TestCase):
+    """_estado/_limpiar_estado solo imprimen en una terminal real: bajo
+    pythonw (tarea programada) sys.stdout es None y isatty() no existe."""
+
+    def test_estado_no_revienta_sin_stdout(self):
+        tmp = tempfile.mkdtemp()
+        s = SyncFalso(tmp)
+        with mock.patch.object(sync_ramos.sys, "stdout", None):
+            s._estado("leyendo módulos…")
+            s._limpiar_estado()
 
 
 class TestMensajes(unittest.TestCase):
@@ -197,6 +210,30 @@ class TestConfig(unittest.TestCase):
         cfg = self._cargar(self.BASE + 'canvas:\n  excluir: ["mensajes"]\n')
         self.assertNotIn("mensajes", cfg["canvas"]["fuentes"])
         self.assertIn("anuncios", cfg["canvas"]["fuentes"])
+
+
+class TestSanitizar(unittest.TestCase):
+    """sanitizar() no debe dejar pasar secretos en logs ni en el resumen de
+    la corrida (ver worker/run.py, que la reusa para eso)."""
+
+    def tearDown(self):
+        sync_ramos._secretos.cache_clear()
+
+    def test_oculta_canvas_token(self):
+        sync_ramos._secretos.cache_clear()
+        with mock.patch.object(sync_ramos, "leer_env",
+                               return_value={"CANVAS_TOKEN": "token-canvas-secreto"}):
+            self.assertNotIn("token-canvas-secreto",
+                             sync_ramos.sanitizar("error: token-canvas-secreto"))
+
+    def test_oculta_supabase_service_key(self):
+        sync_ramos._secretos.cache_clear()
+        with mock.patch.object(sync_ramos, "leer_env", return_value={}), \
+                mock.patch.dict(os.environ, {"SUPABASE_SERVICE_KEY": "service-key-secreta-999"}):
+            self.assertNotIn(
+                "service-key-secreta-999",
+                sync_ramos.sanitizar("Supabase 500: service-key-secreta-999"),
+            )
 
 
 if __name__ == "__main__":

@@ -61,6 +61,7 @@ class FakeSupabase:
         self.runs_iniciados = 0
         self.cerradas = []        # (run_id, ok, summary)
         self.falla_publicar = set()   # canvas_ids en los que publicar_curso debe lanzar
+        self.mensaje_falla = None     # mensaje de la excepcion (default si None)
 
     def curso_publicado(self, canvas_id):
         return canvas_id in self.ya_publicados
@@ -68,7 +69,7 @@ class FakeSupabase:
     def publicar_curso(self, snap, primera_vez):
         cid = snap["course"]["canvas_id"]
         if cid in self.falla_publicar:
-            raise RuntimeError(f"Supabase 500 en courses (curso {cid})")
+            raise RuntimeError(self.mensaje_falla or f"Supabase 500 en courses (curso {cid})")
         self.publicaciones.append((cid, primera_vez, snap))
         return {"courses": 1, "files": len(snap["files"])}
 
@@ -160,6 +161,17 @@ class TestRamoQueFalla(BaseRunTest):
         self.assertFalse(resultados["Ramo A"]["ok"])
         self.assertTrue(resultados["Ramo B"]["ok"])
 
+    def test_error_de_lectura_canvas_no_deja_el_token_en_el_resumen(self):
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            if curso_cfg["canvas_course_id"] == CID_A:
+                raise LecturaFallida("500 error de prueba: Bearer secreto123456")
+            return _snap(CID_B, "Ramo B")
+
+        resultados = run.correr(log=self.log, sync=False,
+                                 **self._kwargs(snapshot_curso))
+
+        self.assertNotIn("secreto123456", resultados["Ramo A"]["error"])
+
     def test_fallo_de_supabase_al_publicar_un_ramo_no_aborta_la_corrida(self):
         self.fake_sb.falla_publicar.add(CID_A)
 
@@ -180,6 +192,18 @@ class TestRamoQueFalla(BaseRunTest):
         self.assertFalse(ok)
         self.assertEqual(summary, resultados)
         self.assertTrue(self.enlaces_creadas[0].guardada)  # se guarda igual
+
+    def test_fallo_de_supabase_no_deja_el_token_en_el_resumen(self):
+        self.fake_sb.falla_publicar.add(CID_A)
+        self.fake_sb.mensaje_falla = "Supabase 500: Bearer secreto123456"
+
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            return _snap(curso_cfg["canvas_course_id"], curso_cfg["nombre"])
+
+        resultados = run.correr(log=self.log, sync=False,
+                                 **self._kwargs(snapshot_curso))
+
+        self.assertNotIn("secreto123456", resultados["Ramo A"]["error"])
 
 
 class TestPrimeraVez(BaseRunTest):
@@ -231,8 +255,11 @@ class TestDriveUrl(BaseRunTest):
 
         self.assertTrue(all(r["ok"] for r in resultados.values()))
         for _cid, _pv, snap in self.fake_sb.publicaciones:
-            self.assertIsNone(snap["course"]["drive_url"])
-            self.assertIsNone(snap["files"][0]["drive_url"])
+            # Sin drive_url key (no None): el upsert en Supabase no debe
+            # pisar un enlace anterior con null solo porque esta corrida no
+            # pudo conectarse a Drive.
+            self.assertNotIn("drive_url", snap["course"])
+            self.assertNotIn("drive_url", snap["files"][0])
         self.assertTrue(any("worker.drive" in l for l in self.lineas))
         self.assertFalse(self.enlaces_creadas)  # no se llego a construir EnlacesDrive
 
@@ -246,7 +273,7 @@ class TestDriveUrl(BaseRunTest):
 
         self.assertTrue(all(r["ok"] for r in resultados.values()))
         for _cid, _pv, snap in self.fake_sb.publicaciones:
-            self.assertIsNone(snap["course"]["drive_url"])
+            self.assertNotIn("drive_url", snap["course"])
         self.assertTrue(any("Mi unidad" in l for l in self.lineas))
         self.assertFalse(any("worker.drive" in l for l in self.lineas))
         self.assertFalse(self.enlaces_creadas)
@@ -350,6 +377,23 @@ class TestSync(BaseRunTest):
 
         self.assertEqual(len(llamadas), 1)
         self.assertTrue(resultados["Ramo A"]["ok"])  # sigue publicando con el manifest existente
+        self.assertFalse(resultados["_sync"]["ok"])  # pero la corrida completa no es ok
+        _run_id, ok, summary = self.fake_sb.cerradas[0]
+        self.assertFalse(ok)
+        self.assertEqual(summary, resultados)
+
+    def test_sync_que_falla_no_deja_el_token_en_el_resumen(self):
+        def sincronizar_falla(cfg, cursos, raiz, log, manifest_path=None):
+            raise RuntimeError("Canvas no responde: Bearer secreto123456")
+
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            return _snap(curso_cfg["canvas_course_id"], curso_cfg["nombre"])
+
+        kwargs = self._kwargs(snapshot_curso, sincronizar=sincronizar_falla,
+                              verificar_drive_root=lambda raiz, escribir=True: None)
+        resultados = run.correr(log=self.log, sync=True, **kwargs)
+
+        self.assertNotIn("secreto123456", resultados["_sync"]["error"])
 
 
 class TestConfigFaltante(BaseRunTest):
@@ -361,6 +405,49 @@ class TestConfigFaltante(BaseRunTest):
         from sync_ramos import ErrorFatal
         with self.assertRaises(ErrorFatal):
             run.correr(log=self.log, sync=False, **kwargs)
+
+
+class TestPrepararSalida(unittest.TestCase):
+    """Bajo pythonw (tarea programada) sys.stdout/sys.stderr son None: sin
+    redirigirlos a os.devnull, cualquier print suelto revienta con
+    AttributeError antes de llegar al log de archivo."""
+
+    def test_reemplaza_stdout_y_stderr_none_por_devnull(self):
+        with mock.patch.object(run.sys, "stdout", None), \
+                mock.patch.object(run.sys, "stderr", None):
+            run._preparar_salida()
+            self.assertIsNotNone(run.sys.stdout)
+            self.assertIsNotNone(run.sys.stderr)
+            run.sys.stdout.write("x")  # no debe lanzar
+            run.sys.stderr.write("x")
+
+    def test_no_toca_stdout_real(self):
+        real = run.sys.stdout
+        run._preparar_salida()
+        self.assertIs(run.sys.stdout, real)
+
+
+class TestConectarFalla(BaseRunTest):
+    """Un fallo al conectar a Canvas no debe dejar la fila de worker_runs
+    abierta para siempre: conectar() corre dentro del try que cierra la
+    corrida."""
+
+    def test_conectar_falla_cierra_la_corrida_con_ok_false(self):
+        def conectar_falla():
+            raise RuntimeError("sin red")
+
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            self.fail("no deberia llegar a snapshot: conectar() fallo antes")
+
+        resultados = run.correr(log=self.log, sync=False,
+                                 **self._kwargs(snapshot_curso, conectar=conectar_falla))
+
+        self.assertFalse(all(r.get("ok") for r in resultados.values()) and resultados)
+        self.assertEqual(self.fake_sb.runs_iniciados, 1)
+        self.assertEqual(len(self.fake_sb.cerradas), 1)
+        _run_id, ok, summary = self.fake_sb.cerradas[0]
+        self.assertFalse(ok)
+        self.assertFalse(all(r.get("ok") for r in summary.values()))
 
 
 @unittest.skipUnless(sys.platform == "win32", "chequeo de pid especifico de Windows")

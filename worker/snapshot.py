@@ -1,6 +1,6 @@
 """Snapshot de un ramo desde Canvas: lee el curso, sus anuncios, tareas,
 módulos/ítems y los archivos ya bajados (del manifest de sync_ramos), y arma
-las filas que Task 3 publica en Supabase.
+las filas que worker/supabase.py publica en Supabase.
 
 Todas las llamadas a la API son GET (vía canvas_descargar.Canvas).
 """
@@ -60,7 +60,7 @@ def _fila_anuncio(topic, cid):
     return {
         "canvas_id": topic["id"],
         "course_id": cid,
-        "title": topic.get("title"),
+        "title": topic.get("title") or "",
         "message_html": topic.get("message") or "",
         "posted_at": topic.get("posted_at"),
         "canvas_url": topic.get("html_url"),
@@ -72,7 +72,7 @@ def _fila_tarea(t, cid):
     return {
         "canvas_id": t["id"],
         "course_id": cid,
-        "name": t.get("name"),
+        "name": t.get("name") or "",
         "description_html": t.get("description") or "",
         "canvas_due_at": t.get("due_at"),
         "unlock_at": t.get("unlock_at"),
@@ -85,7 +85,7 @@ def _fila_modulo(m, cid):
     return {
         "canvas_id": m["id"],
         "course_id": cid,
-        "name": m.get("name"),
+        "name": m.get("name") or "",
         "position": m.get("position"),
         "unlock_at": m.get("unlock_at"),
     }
@@ -98,7 +98,7 @@ def _fila_item_modulo(item, mid, cid):
         "course_id": cid,
         "module_id": mid,
         "position": item.get("position"),
-        "title": item.get("title"),
+        "title": item.get("title") or "",
         "type": tipo,
         "file_id": item.get("content_id") if tipo == "File" else None,
         "external_url": item.get("external_url") if tipo == "ExternalUrl" else None,
@@ -135,7 +135,10 @@ def snapshot_curso(api, manifest, curso_cfg, base_url):
     course = _fila_curso(curso_canvas, curso_cfg, cid, base_url)
 
     topics = _listar_o_vacio(lambda: api.discusiones(cid, solo_anuncios=True))
-    announcements = [_fila_anuncio(t, cid) for t in topics]
+    # Un anuncio demorado (delayed_post_at futuro) tiene posted_at null hasta
+    # que se publica; el rol ayudante lo ve igual en Canvas, pero la columna
+    # posted_at de Supabase es not null.
+    announcements = [_fila_anuncio(t, cid) for t in topics if t.get("posted_at")]
 
     tareas = _listar_o_vacio(lambda: api.tareas(cid))
     assignments = [_fila_tarea(t, cid) for t in tareas]
@@ -151,7 +154,8 @@ def snapshot_curso(api, manifest, curso_cfg, base_url):
 
     entradas = manifest.curso(cid).get("archivos", {})
     files = [_fila_archivo(int(fid), entrada, cid, base_url)
-             for fid, entrada in entradas.items()]
+             for fid, entrada in entradas.items()
+             if entrada.get("size") is not None and entrada.get("modified_at")]
 
     return {
         "course": course,

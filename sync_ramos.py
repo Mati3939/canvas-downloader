@@ -96,8 +96,12 @@ def sanitizar(texto):
 
 @functools.lru_cache(maxsize=1)
 def _secretos():
-    token = leer_env().get("CANVAS_TOKEN")
-    return (token,) if token and len(token) > 8 else ()
+    env = leer_env()
+    candidatos = (
+        env.get("CANVAS_TOKEN"),
+        os.environ.get("SUPABASE_SERVICE_KEY") or env.get("SUPABASE_SERVICE_KEY"),
+    )
+    return tuple(s for s in candidatos if s and len(s) > 8)
 
 
 # ---------------------------------------------------------------- archivos
@@ -318,12 +322,15 @@ class _SyncCurso:
         self._paginas = {}   # page_url -> página precargada
 
     def _estado(self, texto):
-        """Línea de avance que se sobrescribe (solo en terminal, no va al log)."""
-        if sys.stdout.isatty():
+        """Línea de avance que se sobrescribe (solo en terminal, no va al log).
+
+        Bajo `pythonw` (tarea programada) `sys.stdout` es None: no hay
+        terminal donde escribir."""
+        if sys.stdout is not None and sys.stdout.isatty():
             print(f"\r  {texto[:70]:<70}", end="", flush=True)
 
     def _limpiar_estado(self):
-        if sys.stdout.isatty():
+        if sys.stdout is not None and sys.stdout.isatty():
             print("\r" + " " * 72 + "\r", end="", flush=True)
 
     # ---- archivos

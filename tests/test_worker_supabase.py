@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from worker.supabase import Supabase  # noqa: E402
+from worker.supabase import Supabase, _TABLAS_HIJAS  # noqa: E402
 
 URL = "https://proyecto.supabase.co"
 KEY = "service-key-secreta"
@@ -111,8 +111,8 @@ class TestUpsert(BaseSupabaseTest):
         self.assertNotIn("ruta", fila)
 
     def test_mantiene_drive_url_si_esta_presente(self):
-        # Task 5 agrega drive_url a cada fila de files (y al curso); este
-        # modulo solo debe dejarlo pasar, nunca tocarlo.
+        # worker/run.py agrega drive_url a cada fila de files (y al curso);
+        # este modulo solo debe dejarlo pasar, nunca tocarlo.
         snap = _snap(files=[
             {"canvas_id": 1, "course_id": CID, "name": "a.pdf", "size": 1,
              "modified_at": "x", "source": "archivos", "source_label": "c",
@@ -213,19 +213,60 @@ class TestPoda(BaseSupabaseTest):
 
 
 class TestCurso(BaseSupabaseTest):
-    def test_primera_vez_setea_initial_published_at(self):
+    def test_upsert_del_curso_nunca_manda_initial_published_at(self):
+        # El upsert de courses va primero (antes de sus hijas) y nunca lleva
+        # initial_published_at: si una hija fallara despues, el curso no
+        # debe quedar marcado como publicado con datos a medias.
         snap = _snap()
         self.sb.publicar_curso(snap, primera_vez=True)
         curso = self._llamadas("POST", "courses")[0]["json"][0]
-        self.assertIn("initial_published_at", curso)
+        self.assertNotIn("initial_published_at", curso)
         self.assertIn("updated_at", curso)
 
-    def test_siguientes_no_setean_initial_published_at(self):
+    def test_primera_vez_marca_publicado_despues_de_las_hijas(self):
+        snap = _snap()
+        self.sb.publicar_curso(snap, primera_vez=True)
+
+        patches = self._llamadas("PATCH", "courses")
+        self.assertEqual(len(patches), 1)
+        patch = patches[0]
+        self.assertIn(f"user_id=eq.{USER}", patch["url"])
+        self.assertIn(f"canvas_id=eq.{CID}", patch["url"])
+        self.assertIn("initial_published_at=is.null", patch["url"])
+        self.assertIn("initial_published_at", patch["json"])
+
+        # El PATCH que marca publicado se manda despues del upsert y la
+        # poda de todas las hijas (orden de llamadas al cliente falso).
+        urls = [l["url"] for l in self.session.llamadas]
+        self.assertLess(urls.index(patches[0]["url"]), len(urls))
+        for tabla in _TABLAS_HIJAS:
+            ultima_de_tabla = max(i for i, l in enumerate(self.session.llamadas)
+                                  if f"/rest/v1/{tabla}" in l["url"])
+            self.assertLess(ultima_de_tabla, urls.index(patches[0]["url"]))
+
+    def test_siguientes_no_marcan_publicado(self):
         snap = _snap()
         self.sb.publicar_curso(snap, primera_vez=False)
         curso = self._llamadas("POST", "courses")[0]["json"][0]
         self.assertNotIn("initial_published_at", curso)
         self.assertIn("updated_at", curso)
+        self.assertEqual(self._llamadas("PATCH", "courses"), [])
+
+    def test_si_una_hija_falla_no_se_marca_publicado(self):
+        # Child upsert falla en la primera publicacion -> el curso no queda
+        # marcado: la proxima corrida lo vuelve a tratar como primera vez.
+        self.session.programar("POST", FakeResponse(200, []))  # courses
+        self.session.programar("POST", FakeResponse(500, text="boom"))  # announcements
+
+        snap = _snap(announcements=[{
+            "canvas_id": 5, "course_id": CID, "title": "t", "message_html": "m",
+            "posted_at": "2026-01-01T00:00:00Z", "canvas_url": "https://x",
+            "attachment_ids": [],
+        }])
+        with self.assertRaises(RuntimeError):
+            self.sb.publicar_curso(snap, primera_vez=True)
+
+        self.assertEqual(self._llamadas("PATCH", "courses"), [])
 
 
 class TestHeaders(BaseSupabaseTest):

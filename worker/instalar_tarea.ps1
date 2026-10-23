@@ -16,7 +16,16 @@ $ErrorActionPreference = "Stop"
 
 $nombreTarea = "Better Canvas"
 $repo = Split-Path -Parent $PSScriptRoot
-$pythonw = (Get-Command pythonw).Source
+
+# El launcher "py" resuelve el Python instalado para todo el sistema, no el
+# primero que encuentre en el PATH: si esta sesion de PowerShell tiene un
+# venv activado, "Get-Command pythonw" devolveria el pythonw de ese venv (que
+# no tiene las dependencias del trabajador) en vez del real.
+$pythonExe = & py -3 -c "import sys; print(sys.executable)"
+$pythonw = Join-Path (Split-Path -Parent $pythonExe) "pythonw.exe"
+if (-not (Test-Path $pythonw)) {
+    throw "No encuentro pythonw.exe junto a $pythonExe"
+}
 
 $accion = New-ScheduledTaskAction -Execute $pythonw -Argument "-m worker.run" `
     -WorkingDirectory $repo
@@ -35,7 +44,8 @@ $config = New-ScheduledTaskSettingsSet `
     -RunOnlyIfNetworkAvailable `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
-    -MultipleInstances IgnoreNew
+    -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 1)
 
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME `
     -LogonType Interactive -RunLevel Limited

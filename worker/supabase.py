@@ -73,8 +73,12 @@ class Supabase:
         self._revisar(resp, tabla)
 
     def publicar_curso(self, snap: dict, primera_vez: bool) -> dict:
-        """Upsert del curso, luego de sus hijas, y poda de hijas por
-        (user_id, course_id). Devuelve {tabla: cantidad de filas enviadas}."""
+        """Upsert del curso (sin marcarlo publicado todavia), luego de sus
+        hijas, y poda de hijas por (user_id, course_id). Recien si todo eso
+        sale bien se marca el curso como publicado (ver `_marcar_publicado`):
+        si una hija fallara en el medio, la proxima corrida tiene que verlo
+        otra vez como primera publicacion, no como si ya hubiera pasado.
+        Devuelve {tabla: cantidad de filas enviadas}."""
         conteos = {}
         cid = snap["course"]["canvas_id"]
         ahora = _ahora_iso()
@@ -82,8 +86,6 @@ class Supabase:
         curso = dict(snap["course"])
         curso["user_id"] = self._user_id
         curso["updated_at"] = ahora
-        if primera_vez:
-            curso["initial_published_at"] = ahora
         self._upsert("courses", [curso])
         conteos["courses"] = 1
 
@@ -102,7 +104,23 @@ class Supabase:
             self._podar(tabla, cid, [fila["canvas_id"] for fila in filas_crudas])
             conteos[tabla] = len(filas)
 
+        if primera_vez:
+            self._marcar_publicado(cid, ahora)
+
         return conteos
+
+    def _marcar_publicado(self, cid: int, ahora: str) -> None:
+        """Pone `initial_published_at` solo si todavia esta null. El filtro
+        `is.null` es lo que hace esto seguro de repetir: si dos corridas se
+        solaparan, la segunda no pisa la fecha que puso la primera."""
+        resp = self._session.patch(
+            f"{self._url}/rest/v1/courses"
+            f"?user_id=eq.{self._user_id}&canvas_id=eq.{cid}&initial_published_at=is.null",
+            json={"initial_published_at": ahora},
+            headers=self._headers(),
+            timeout=_TIMEOUT,
+        )
+        self._revisar(resp, "courses")
 
     def curso_publicado(self, canvas_id: int) -> bool:
         """True si el curso ya tiene `initial_published_at` no nulo."""

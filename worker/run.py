@@ -206,12 +206,19 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
     raiz = resolver_drive_root(env)
     manifest_path = manifest_path or MANIFEST_FILE
 
+    resultados = {}
     if sync:
         try:
             verificar_drive_root(raiz, escribir=True)
             sincronizar(cfg, cursos, raiz, _log, manifest_path=manifest_path)
         except Exception as e:
-            _log(f"✗ no se pudo sincronizar: {e}")
+            # Si el sync falla, la corrida igual publica con el manifest
+            # existente (mas abajo), pero la corrida completa no puede
+            # quedar ok=True: Supabase mostraria datos viejos como si fueran
+            # la ultima sincronizacion.
+            mensaje = sanitizar(str(e))
+            _log(f"✗ no se pudo sincronizar: {mensaje}")
+            resultados["_sync"] = {"ok": False, "error": mensaje}
 
     manifest = Manifest(manifest_path)
 
@@ -231,17 +238,17 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
     sb = Supabase(config_sb["SUPABASE_URL"], config_sb["SUPABASE_SERVICE_KEY"],
                   config_sb["BC_USER_ID"])
     run_id = sb.iniciar_corrida()
-    api = conectar()
 
-    resultados = {}
     try:
+        api = conectar()
         for curso_cfg in cursos:
             nombre = curso_cfg["nombre"]
             try:
                 snap = snapshot_curso(api, manifest, curso_cfg, api.base)
             except (LecturaFallida, requests.RequestException) as e:
-                _log(f"✗ {nombre}: no se pudo leer de Canvas, no se publica: {e}")
-                resultados[nombre] = {"ok": False, "error": str(e)}
+                mensaje = sanitizar(str(e))
+                _log(f"✗ {nombre}: no se pudo leer de Canvas, no se publica: {mensaje}")
+                resultados[nombre] = {"ok": False, "error": mensaje}
                 continue
 
             if enlaces is not None:
@@ -251,10 +258,9 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
                 for fila in snap["files"]:
                     fila["drive_url"] = enlaces.enlace(
                         curso_partes + ["canvas"] + fila["ruta"].split("/"))
-            else:
-                snap["course"]["drive_url"] = None
-                for fila in snap["files"]:
-                    fila["drive_url"] = None
+            # Si Drive no esta disponible, no se manda drive_url (ni null):
+            # el merge-duplicates del upsert deja el enlace anterior tal
+            # como estaba en vez de borrarlo.
 
             try:
                 primera_vez = not sb.curso_publicado(snap["course"]["canvas_id"])
@@ -263,12 +269,20 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
                 # Un fallo de Supabase (red, 5xx, etc.) en un ramo no debe
                 # abortar la corrida completa: los demas ramos se publican
                 # igual y la corrida se cierra con ok=False.
-                _log(f"✗ {nombre}: no se pudo publicar en Supabase: {e}")
-                resultados[nombre] = {"ok": False, "error": str(e)}
+                mensaje = sanitizar(str(e))
+                _log(f"✗ {nombre}: no se pudo publicar en Supabase: {mensaje}")
+                resultados[nombre] = {"ok": False, "error": mensaje}
                 continue
 
             resultados[nombre] = {"ok": True, "conteos": conteos}
             _log(f"  {nombre}: publicado en Supabase {conteos}")
+    except Exception as e:
+        # Un error que se escapa del recorrido por ramo (por ejemplo no
+        # poder conectar a Canvas) no debe dejar la corrida "ok" solo
+        # porque los resultados parciales lo eran: se registra aparte.
+        mensaje = sanitizar(str(e))
+        _log(f"✗ error inesperado: {mensaje}")
+        resultados["_error"] = {"ok": False, "error": mensaje}
     finally:
         if enlaces is not None:
             try:
@@ -276,7 +290,7 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
             except Exception as e:
                 _log(f"✗ no se pudo guardar la cache de enlaces de Drive: {e}")
 
-        ok_total = all(r["ok"] for r in resultados.values())
+        ok_total = bool(resultados) and all(r["ok"] for r in resultados.values())
         try:
             sb.cerrar_corrida(run_id, ok_total, resultados)
         except Exception as e:
@@ -302,7 +316,21 @@ def _log_consola_y_archivo(archivo):
     return log
 
 
+def _preparar_salida():
+    """Bajo `pythonw` (tarea programada) sys.stdout y sys.stderr son None:
+    sin esto, cualquier print suelto o el log de argparse revientan con
+    AttributeError antes de llegar al log de archivo (ver iniciar_canvas.pyw,
+    que hace lo mismo para la GUI)."""
+    for nombre in ("stdout", "stderr"):
+        if getattr(sys, nombre, None) is None:
+            try:
+                setattr(sys, nombre, open(os.devnull, "w", encoding="utf-8"))
+            except OSError:
+                pass
+
+
 def main(argv=None):
+    _preparar_salida()
     parser = argparse.ArgumentParser(description="Corrida del trabajador de Better Canvas.")
     parser.add_argument("--sin-sync", action="store_true",
                         help="Solo publica en Supabase; no sincroniza Canvas con Drive.")
