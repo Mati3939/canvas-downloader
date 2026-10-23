@@ -21,3 +21,6 @@ error_inicio.log
 # Sync de ramos: config personal y estado local
 ramos.yaml
 sync_estado/
+
+# Estado local del trabajador de Better Canvas (tokens, cache)
+worker_estado/
