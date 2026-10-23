@@ -1,18 +1,32 @@
 import { EstadoTrabajador } from "@/components/EstadoTrabajador";
 import { Novedad } from "@/components/Novedad";
 import { TarjetaRamo } from "@/components/TarjetaRamo";
-import { armarNovedades } from "@/lib/novedades";
+import {
+  armarNovedades,
+  type AnuncioParaNovedades,
+  type TareaParaNovedades,
+} from "@/lib/novedades";
 import { createClient } from "@/lib/supabase/server";
-import type {
-  Anuncio,
-  Archivo,
-  CorridaTrabajador,
-  Curso,
-  Tarea,
-} from "@/lib/tipos";
+import type { Archivo, CorridaTrabajador, Curso } from "@/lib/tipos";
 
 const DIAS_LO_NUEVO = 14;
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+const COLUMNAS_ANUNCIOS =
+  "canvas_id, course_id, title, posted_at, canvas_url, attachment_ids, inicial";
+const COLUMNAS_TAREAS =
+  "canvas_id, course_id, name, canvas_url, inicial, first_seen_at";
+
+function MensajeError() {
+  return (
+    <main className="flex flex-1 flex-col items-center justify-center gap-2 bg-zinc-50 px-6 text-center dark:bg-black">
+      <p className="text-sm text-red-600 dark:text-red-400">
+        No se pudo cargar la informacion de tus ramos. Intenta de nuevo mas
+        tarde.
+      </p>
+    </main>
+  );
+}
 
 export default async function Home() {
   const supabase = await createClient();
@@ -26,8 +40,11 @@ export default async function Home() {
         .select("*")
         .order("position", { ascending: true, nullsFirst: false })
         .order("name", { ascending: true }),
-      supabase.from("announcements").select("*").eq("inicial", false),
-      supabase.from("assignments").select("*").eq("inicial", false),
+      supabase
+        .from("announcements")
+        .select(COLUMNAS_ANUNCIOS)
+        .eq("inicial", false),
+      supabase.from("assignments").select(COLUMNAS_TAREAS).eq("inicial", false),
       supabase.from("files").select("*").eq("inicial", false),
       supabase
         .from("worker_runs")
@@ -38,9 +55,20 @@ export default async function Home() {
         .maybeSingle(),
     ]);
 
+  const error =
+    cursosRes.error ??
+    anunciosRes.error ??
+    tareasRes.error ??
+    archivosRes.error ??
+    corridaRes.error;
+
+  if (error) {
+    return <MensajeError />;
+  }
+
   const cursos = (cursosRes.data ?? []) as Curso[];
-  const anuncios = (anunciosRes.data ?? []) as Anuncio[];
-  const tareas = (tareasRes.data ?? []) as Tarea[];
+  const anuncios = (anunciosRes.data ?? []) as AnuncioParaNovedades[];
+  const tareas = (tareasRes.data ?? []) as TareaParaNovedades[];
   const archivos = (archivosRes.data ?? []) as Archivo[];
   const corrida = (corridaRes.data ?? null) as CorridaTrabajador | null;
 

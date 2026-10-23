@@ -116,4 +116,37 @@ describe("armarNovedades", () => {
 
     expect(novedades.map((n) => n.id)).toEqual([3, 1]);
   });
+
+  test("un adjunto de un anuncio fuera de la ventana aparece suelto", () => {
+    const anuncioFueraDeVentana = anuncio({
+      canvas_id: 1,
+      posted_at: "2026-08-01T00:00:00Z",
+      attachment_ids: [3],
+    });
+    const archivoReciente = archivo({
+      canvas_id: 3,
+      first_seen_at: "2026-10-10T00:00:00Z",
+    });
+
+    const novedades = armarNovedades(
+      [anuncioFueraDeVentana],
+      [],
+      [archivoReciente],
+      desde,
+    );
+
+    expect(novedades).toHaveLength(1);
+    expect(novedades[0]).toMatchObject({ tipo: "archivo", id: 3 });
+  });
+
+  test("incluye un item cuya fecha es exactamente igual a desde", () => {
+    const novedades = armarNovedades(
+      [anuncio({ canvas_id: 1, posted_at: desde.toISOString() })],
+      [],
+      [],
+      desde,
+    );
+
+    expect(novedades.map((n) => n.id)).toEqual([1]);
+  });
 });

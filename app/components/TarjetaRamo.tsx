@@ -3,7 +3,7 @@ import type { Curso } from "@/lib/tipos";
 
 /**
  * Tarjeta de un ramo en el inicio. Enlaza a la vista del ramo dentro de la
- * app (Task 8); marca los ramos donde el rol es ayudante.
+ * app; marca los ramos donde el rol es ayudante.
  */
 export function TarjetaRamo({ curso }: { curso: Curso }) {
   return (
