@@ -24,3 +24,8 @@ sync_estado/
 
 # Estado local del trabajador de Better Canvas (tokens, cache)
 worker_estado/
+
+# App Next.js (Better Canvas)
+app/.env*.local
+app/.next/
+app/node_modules/
