@@ -259,6 +259,18 @@ def _ejecutar_descarga(cursos_sel, fuentes, dest, por_termino=False):
             _descarga_activa = False
 
 
+def _tiene_config_supabase():
+    """True si .env/entorno tienen lo que necesita worker.run para publicar
+    en Supabase (sin lanzar la corrida)."""
+    try:
+        import sync_ramos
+        import worker.run as worker_run
+        worker_run._config_supabase(sync_ramos.leer_env())
+        return True
+    except Exception:
+        return False
+
+
 def _ejecutar_sync():
     global _descarga_activa, _resumen, _dest_actual
     errores = nuevos = sin_cambios = 0
@@ -276,6 +288,21 @@ def _ejecutar_sync():
 
         _dest_actual = str(Path(raiz) / cfg["semestre"])
         log(f"Carpeta de ramos: {_dest_actual}")
+
+        if _tiene_config_supabase():
+            # Config de Supabase presente: la corrida completa del
+            # trabajador (sync + publicación) reemplaza al sync solo.
+            import worker.run as worker_run
+            resultados = worker_run.correr(log=log)
+            for nombre, r in resultados.items():
+                if r.get("ok"):
+                    log(f"  {nombre}: publicado en Supabase")
+                else:
+                    errores += 1
+                    log(f"  ✗ {nombre}: {r.get('error')}")
+            _resumen = {"nuevos": nuevos, "saltados": sin_cambios, "errores": errores}
+            return
+
         manifest = os.environ.get("SYNC_MANIFEST") or sync_ramos.MANIFEST_FILE
         try:
             resultados = sync_ramos.sincronizar(cfg, cfg["cursos"], raiz, log,
