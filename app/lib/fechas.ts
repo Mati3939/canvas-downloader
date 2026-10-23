@@ -1,5 +1,7 @@
 const ZONA = "America/Santiago";
 
+export const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
 const UNIDADES: { limite: number; div: number; unidad: Intl.RelativeTimeFormatUnit }[] = [
   { limite: 60, div: 1, unidad: "second" },
   { limite: 3600, div: 60, unidad: "minute" },

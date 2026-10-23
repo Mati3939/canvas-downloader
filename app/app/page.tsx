@@ -1,8 +1,12 @@
 import { EstadoTrabajador } from "@/components/EstadoTrabajador";
+import { MensajeError } from "@/components/MensajeError";
 import { Novedad } from "@/components/Novedad";
 import { TarjetaRamo } from "@/components/TarjetaRamo";
+import { MS_POR_DIA } from "@/lib/fechas";
 import {
   armarNovedades,
+  COLUMNAS_ANUNCIO_PARA_NOVEDADES,
+  COLUMNAS_TAREA_PARA_NOVEDADES,
   type AnuncioParaNovedades,
   type TareaParaNovedades,
 } from "@/lib/novedades";
@@ -10,23 +14,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { Archivo, CorridaTrabajador, Curso } from "@/lib/tipos";
 
 const DIAS_LO_NUEVO = 14;
-const MS_POR_DIA = 24 * 60 * 60 * 1000;
-
-const COLUMNAS_ANUNCIOS =
-  "canvas_id, course_id, title, posted_at, canvas_url, attachment_ids, inicial";
-const COLUMNAS_TAREAS =
-  "canvas_id, course_id, name, canvas_url, inicial, first_seen_at";
-
-function MensajeError() {
-  return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-2 bg-zinc-50 px-6 text-center dark:bg-black">
-      <p className="text-sm text-red-600 dark:text-red-400">
-        No se pudo cargar la informacion de tus ramos. Intenta de nuevo mas
-        tarde.
-      </p>
-    </main>
-  );
-}
+const MENSAJE_ERROR =
+  "No se pudo cargar la informacion de tus ramos. Intenta de nuevo mas tarde.";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -42,9 +31,12 @@ export default async function Home() {
         .order("name", { ascending: true }),
       supabase
         .from("announcements")
-        .select(COLUMNAS_ANUNCIOS)
+        .select(COLUMNAS_ANUNCIO_PARA_NOVEDADES)
         .eq("inicial", false),
-      supabase.from("assignments").select(COLUMNAS_TAREAS).eq("inicial", false),
+      supabase
+        .from("assignments")
+        .select(COLUMNAS_TAREA_PARA_NOVEDADES)
+        .eq("inicial", false),
       supabase.from("files").select("*").eq("inicial", false),
       supabase
         .from("worker_runs")
@@ -63,7 +55,7 @@ export default async function Home() {
     corridaRes.error;
 
   if (error) {
-    return <MensajeError />;
+    return <MensajeError mensaje={MENSAJE_ERROR} />;
   }
 
   const cursos = (cursosRes.data ?? []) as Curso[];

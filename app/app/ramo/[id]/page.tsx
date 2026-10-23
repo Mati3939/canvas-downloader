@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FilaArchivo } from "@/components/FilaArchivo";
-import { ListaModulos } from "@/components/ListaModulos";
+import { ListaModulos, type ItemModuloResumen, type ModuloResumen } from "@/components/ListaModulos";
+import { MensajeError } from "@/components/MensajeError";
 import { Novedad } from "@/components/Novedad";
+import { MS_POR_DIA } from "@/lib/fechas";
 import { agruparMaterial } from "@/lib/material";
 import {
   armarNovedades,
+  COLUMNAS_ANUNCIO_PARA_NOVEDADES,
+  COLUMNAS_TAREA_PARA_NOVEDADES,
   type AnuncioParaNovedades,
   type TareaParaNovedades,
 } from "@/lib/novedades";
@@ -13,13 +17,10 @@ import { createClient } from "@/lib/supabase/server";
 import type { Archivo, Curso } from "@/lib/tipos";
 
 const DIAS_LO_NUEVO = 30;
-const MS_POR_DIA = 24 * 60 * 60 * 1000;
+const MENSAJE_ERROR =
+  "No se pudo cargar la informacion de este ramo. Intenta de nuevo mas tarde.";
 
 const COLUMNAS_CURSO = "canvas_id, name, role, canvas_url, drive_url";
-const COLUMNAS_ANUNCIOS =
-  "canvas_id, course_id, title, posted_at, canvas_url, attachment_ids, inicial";
-const COLUMNAS_TAREAS =
-  "canvas_id, course_id, name, canvas_url, inicial, first_seen_at";
 const COLUMNAS_MODULOS = "canvas_id, name, position";
 const COLUMNAS_ITEMS =
   "canvas_id, module_id, position, title, type, file_id, external_url, canvas_url";
@@ -33,17 +34,6 @@ const PESTANAS: { valor: Pestana; etiqueta: string }[] = [
 
 function esPestana(valor: string | undefined): valor is Pestana {
   return valor === "nuevo" || valor === "material" || valor === "modulos";
-}
-
-function MensajeError() {
-  return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-2 bg-zinc-50 px-6 text-center dark:bg-black">
-      <p className="text-sm text-red-600 dark:text-red-400">
-        No se pudo cargar la informacion de este ramo. Intenta de nuevo mas
-        tarde.
-      </p>
-    </main>
-  );
 }
 
 export default async function PaginaRamo({
@@ -75,12 +65,12 @@ export default async function PaginaRamo({
         .maybeSingle(),
       supabase
         .from("announcements")
-        .select(COLUMNAS_ANUNCIOS)
+        .select(COLUMNAS_ANUNCIO_PARA_NOVEDADES)
         .eq("course_id", cursoId)
         .eq("inicial", false),
       supabase
         .from("assignments")
-        .select(COLUMNAS_TAREAS)
+        .select(COLUMNAS_TAREA_PARA_NOVEDADES)
         .eq("course_id", cursoId)
         .eq("inicial", false),
       supabase.from("files").select("*").eq("course_id", cursoId),
@@ -96,7 +86,11 @@ export default async function PaginaRamo({
         .order("position", { ascending: true }),
     ]);
 
-  if (cursoRes.error || !cursoRes.data) {
+  if (cursoRes.error) {
+    return <MensajeError mensaje={MENSAJE_ERROR} />;
+  }
+
+  if (!cursoRes.data) {
     notFound();
   }
 
@@ -104,7 +98,7 @@ export default async function PaginaRamo({
     anunciosRes.error ?? tareasRes.error ?? archivosRes.error ?? modulosRes.error ?? itemsRes.error;
 
   if (error) {
-    return <MensajeError />;
+    return <MensajeError mensaje={MENSAJE_ERROR} />;
   }
 
   const curso = cursoRes.data as Pick<
@@ -114,8 +108,8 @@ export default async function PaginaRamo({
   const anuncios = (anunciosRes.data ?? []) as AnuncioParaNovedades[];
   const tareas = (tareasRes.data ?? []) as TareaParaNovedades[];
   const archivos = (archivosRes.data ?? []) as Archivo[];
-  const modulos = modulosRes.data ?? [];
-  const items = itemsRes.data ?? [];
+  const modulos = (modulosRes.data ?? []) as ModuloResumen[];
+  const items = (itemsRes.data ?? []) as ItemModuloResumen[];
 
   const novedades = armarNovedades(anuncios, tareas, archivos, desde);
   const grupos = agruparMaterial(archivos);

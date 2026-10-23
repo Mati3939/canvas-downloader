@@ -12,11 +12,19 @@ export type AnuncioParaNovedades = Pick<
   | "inicial"
 >;
 
+/** Lista de columnas para `select()`, en el mismo orden que el Pick de arriba. */
+export const COLUMNAS_ANUNCIO_PARA_NOVEDADES =
+  "canvas_id, course_id, title, posted_at, canvas_url, attachment_ids, inicial";
+
 /** Columnas de `assignments` que necesita `armarNovedades`. */
 export type TareaParaNovedades = Pick<
   Tarea,
   "canvas_id" | "course_id" | "name" | "canvas_url" | "inicial" | "first_seen_at"
 >;
+
+/** Lista de columnas para `select()`, en el mismo orden que el Pick de arriba. */
+export const COLUMNAS_TAREA_PARA_NOVEDADES =
+  "canvas_id, course_id, name, canvas_url, inicial, first_seen_at";
 
 export type Novedad = {
   tipo: "anuncio" | "archivo" | "tarea";

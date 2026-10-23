@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { agruparMaterial, enlacePrincipal } from "./material";
+import { agruparMaterial, enlacePrincipal, formatearTamano } from "./material";
 import type { Archivo } from "./tipos";
 
 function archivo(datos: Partial<Archivo>): Archivo {
@@ -80,5 +80,14 @@ describe("agruparMaterial", () => {
       "tareas",
       "mensajes",
     ]);
+  });
+});
+
+describe("formatearTamano", () => {
+  test("bytes sin decimales, KB/MB/GB con un decimal y coma", () => {
+    expect(formatearTamano(512)).toBe("512 B");
+    expect(formatearTamano(1536)).toBe("1,5 KB");
+    expect(formatearTamano(1_258_291)).toBe("1,2 MB");
+    expect(formatearTamano(2 * 1024 * 1024 * 1024)).toBe("2,0 GB");
   });
 });
