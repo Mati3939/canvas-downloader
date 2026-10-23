@@ -87,6 +87,7 @@ export default async function PaginaRamo({
     ]);
 
   if (cursoRes.error) {
+    console.error("Error de Supabase cargando el ramo:", cursoRes.error.message);
     return <MensajeError mensaje={MENSAJE_ERROR} />;
   }
 
@@ -98,6 +99,7 @@ export default async function PaginaRamo({
     anunciosRes.error ?? tareasRes.error ?? archivosRes.error ?? modulosRes.error ?? itemsRes.error;
 
   if (error) {
+    console.error("Error de Supabase cargando el ramo:", error.message);
     return <MensajeError mensaje={MENSAJE_ERROR} />;
   }
 

@@ -55,6 +55,7 @@ export default async function Home() {
     corridaRes.error;
 
   if (error) {
+    console.error("Error de Supabase cargando la pagina de inicio:", error.message);
     return <MensajeError mensaje={MENSAJE_ERROR} />;
   }
 

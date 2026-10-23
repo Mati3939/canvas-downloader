@@ -28,6 +28,11 @@ export function EstadoTrabajador({
   return (
     <div className="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
       <p>Actualizado {tiempoRelativo(corrida.finished_at, ahora)}</p>
+      {corrida.ok === false ? (
+        <p className="font-medium text-amber-600 dark:text-amber-400">
+          La ultima sincronizacion tuvo errores.
+        </p>
+      ) : null}
       {horas > LIMITE_HORAS_AVISO ? (
         <p className="font-medium text-amber-600 dark:text-amber-400">
           El PC no ha sincronizado desde {fechaHoraSantiago(corrida.finished_at)}.
