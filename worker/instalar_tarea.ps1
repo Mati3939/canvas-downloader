@@ -23,27 +23,31 @@ $accion = New-ScheduledTaskAction -Execute $pythonw -Argument "-m worker.run" `
 
 $disparadorInicio = New-ScheduledTaskTrigger -AtLogOn
 
+# Sin -RepetitionDuration, -Once + -RepetitionInterval repite
+# indefinidamente (Windows 10/11); con -RepetitionDuration
+# ([TimeSpan]::MaxValue) Register-ScheduledTask lo rechaza
+# ("value incorrectly formatted or out of range").
 $disparadorPeriodico = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Hours 2) `
-    -RepetitionDuration ([TimeSpan]::MaxValue)
+    -RepetitionInterval (New-TimeSpan -Hours 2)
 
 $config = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -RunOnlyIfNetworkAvailable `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
     -MultipleInstances IgnoreNew
 
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME `
     -LogonType Interactive -RunLevel Limited
 
-$tareaExistente = Get-ScheduledTask -TaskName $nombreTarea -ErrorAction SilentlyContinue
-if ($tareaExistente) {
-    Unregister-ScheduledTask -TaskName $nombreTarea -Confirm:$false
-}
-
+# -Force reemplaza la tarea si ya existe, sin un paso previo de
+# desregistrarla: si el registro nuevo fallara, la tarea anterior (si
+# funcionaba) sigue en pie en vez de quedar borrada.
 Register-ScheduledTask -TaskName $nombreTarea `
     -Action $accion `
     -Trigger @($disparadorInicio, $disparadorPeriodico) `
     -Settings $config `
-    -Principal $principal | Out-Null
+    -Principal $principal `
+    -Force | Out-Null
 
 Write-Host "Tarea '$nombreTarea' instalada: corre cada 2 horas y al iniciar sesion."

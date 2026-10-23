@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import requests
 
@@ -59,12 +60,15 @@ class FakeSupabase:
         self.ya_publicados = set()
         self.runs_iniciados = 0
         self.cerradas = []        # (run_id, ok, summary)
+        self.falla_publicar = set()   # canvas_ids en los que publicar_curso debe lanzar
 
     def curso_publicado(self, canvas_id):
         return canvas_id in self.ya_publicados
 
     def publicar_curso(self, snap, primera_vez):
         cid = snap["course"]["canvas_id"]
+        if cid in self.falla_publicar:
+            raise RuntimeError(f"Supabase 500 en courses (curso {cid})")
         self.publicaciones.append((cid, primera_vez, snap))
         return {"courses": 1, "files": len(snap["files"])}
 
@@ -156,6 +160,27 @@ class TestRamoQueFalla(BaseRunTest):
         self.assertFalse(resultados["Ramo A"]["ok"])
         self.assertTrue(resultados["Ramo B"]["ok"])
 
+    def test_fallo_de_supabase_al_publicar_un_ramo_no_aborta_la_corrida(self):
+        self.fake_sb.falla_publicar.add(CID_A)
+
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            return _snap(curso_cfg["canvas_course_id"], curso_cfg["nombre"])
+
+        resultados = run.correr(log=self.log, sync=False,
+                                 **self._kwargs(snapshot_curso))
+
+        self.assertFalse(resultados["Ramo A"]["ok"])
+        self.assertIn("error", resultados["Ramo A"])
+        self.assertTrue(resultados["Ramo B"]["ok"])
+        ids_publicados = [cid for cid, _, _ in self.fake_sb.publicaciones]
+        self.assertEqual(ids_publicados, [CID_B])
+
+        run_id, ok, summary = self.fake_sb.cerradas[0]
+        self.assertEqual(run_id, 42)
+        self.assertFalse(ok)
+        self.assertEqual(summary, resultados)
+        self.assertTrue(self.enlaces_creadas[0].guardada)  # se guarda igual
+
 
 class TestPrimeraVez(BaseRunTest):
     def test_primera_vez_segun_supabase(self):
@@ -210,6 +235,43 @@ class TestDriveUrl(BaseRunTest):
             self.assertIsNone(snap["files"][0]["drive_url"])
         self.assertTrue(any("worker.drive" in l for l in self.lineas))
         self.assertFalse(self.enlaces_creadas)  # no se llego a construir EnlacesDrive
+
+    def test_drive_root_fuera_de_mi_unidad_logea_mensaje_distinto(self):
+        self.env["DRIVE_ROOT"] = str(Path(self.tmp) / "OtraCosa" / "Campus")
+
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            return _snap(curso_cfg["canvas_course_id"], curso_cfg["nombre"])
+
+        resultados = run.correr(log=self.log, sync=False, **self._kwargs(snapshot_curso))
+
+        self.assertTrue(all(r["ok"] for r in resultados.values()))
+        for _cid, _pv, snap in self.fake_sb.publicaciones:
+            self.assertIsNone(snap["course"]["drive_url"])
+        self.assertTrue(any("Mi unidad" in l for l in self.lineas))
+        self.assertFalse(any("worker.drive" in l for l in self.lineas))
+        self.assertFalse(self.enlaces_creadas)
+
+    def test_guardar_se_llama_al_terminar(self):
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            return _snap(curso_cfg["canvas_course_id"], curso_cfg["nombre"])
+
+        run.correr(log=self.log, sync=False, **self._kwargs(snapshot_curso))
+
+        self.assertTrue(self.enlaces_creadas)
+        self.assertTrue(self.enlaces_creadas[0].guardada)
+
+
+class TestPosition(BaseRunTest):
+    def test_position_es_el_indice_en_cursos(self):
+        vistos = []
+
+        def snapshot_curso(api, manifest, curso_cfg, base_url):
+            vistos.append((curso_cfg["nombre"], curso_cfg.get("position")))
+            return _snap(curso_cfg["canvas_course_id"], curso_cfg["nombre"])
+
+        run.correr(log=self.log, sync=False, **self._kwargs(snapshot_curso))
+
+        self.assertEqual(vistos, [("Ramo A", 0), ("Ramo B", 1)])
 
 
 class TestLock(BaseRunTest):
@@ -299,6 +361,25 @@ class TestConfigFaltante(BaseRunTest):
         from sync_ramos import ErrorFatal
         with self.assertRaises(ErrorFatal):
             run.correr(log=self.log, sync=False, **kwargs)
+
+
+@unittest.skipUnless(sys.platform == "win32", "chequeo de pid especifico de Windows")
+class TestPidVivoWindows(unittest.TestCase):
+    """_pid_vivo() en Windows: sin permiso para abrir el proceso (pid de
+    otra sesion/usuario) se trata como vivo, para no robarle el lock a una
+    corrida real; sin permiso ni proceso (pid invalido), como muerto."""
+
+    def test_sin_handle_por_acceso_denegado_se_trata_como_vivo(self):
+        with mock.patch.object(run, "_kernel32") as kernel32_falso, \
+                mock.patch("ctypes.get_last_error", return_value=5):  # ERROR_ACCESS_DENIED
+            kernel32_falso.OpenProcess.return_value = 0
+            self.assertTrue(run._pid_vivo(4))
+
+    def test_sin_handle_por_pid_invalido_no_esta_vivo(self):
+        with mock.patch.object(run, "_kernel32") as kernel32_falso, \
+                mock.patch("ctypes.get_last_error", return_value=87):  # ERROR_INVALID_PARAMETER
+            kernel32_falso.OpenProcess.return_value = 0
+            self.assertFalse(run._pid_vivo(999999999))
 
 
 if __name__ == "__main__":

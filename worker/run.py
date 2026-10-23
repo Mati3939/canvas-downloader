@@ -43,6 +43,21 @@ LOG_FILE = ESTADO_DIR / "ultima_corrida.log"
 
 _CLAVES_SUPABASE = ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "BC_USER_ID")
 
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_STILL_ACTIVE = 259
+_ERROR_ACCESS_DENIED = 5
+
+if sys.platform == "win32":
+    from ctypes import wintypes
+
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _kernel32.OpenProcess.restype = wintypes.HANDLE
+    _kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    _kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    _kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    _kernel32.CloseHandle.restype = wintypes.BOOL
+    _kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+
 
 def _config_supabase(env):
     """Config de Supabase del worker: variables de entorno tienen prioridad
@@ -61,25 +76,24 @@ def _config_supabase(env):
 # --------------------------------------------------------------------- lock
 
 def _pid_vivo(pid):
-    """True si el proceso con ese pid sigue corriendo.
+    """True si el proceso con ese pid sigue corriendo (o no se puede saber
+    con certeza, por ejemplo sin permiso para abrirlo: ante la duda se
+    trata como vivo, para no robarle el lock a una corrida real).
 
     En Windows, `os.kill(pid, 0)` en realidad *termina* el proceso (no es un
     simple chequeo como en POSIX): hay que usar la API nativa en su lugar.
     """
     if sys.platform == "win32":
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        STILL_ACTIVE = 259
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        handle = _kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not handle:
-            return False
+            return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
         try:
-            codigo = ctypes.c_ulong()
-            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(codigo)):
+            codigo = wintypes.DWORD()
+            if not _kernel32.GetExitCodeProcess(handle, ctypes.byref(codigo)):
                 return False
-            return codigo.value == STILL_ACTIVE
+            return codigo.value == _STILL_ACTIVE
         finally:
-            kernel32.CloseHandle(handle)
+            _kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except (OSError, AttributeError):
@@ -90,24 +104,41 @@ def _pid_vivo(pid):
 class _LockCorrida:
     """Lock de archivo con el pid del proceso que lo tiene. Si el pid no
     corresponde a un proceso vivo, o el archivo no se puede leer, el lock se
-    considera abandonado y se toma igual."""
+    considera abandonado: se borra y se reintenta una vez.
+
+    La creación con `os.O_CREAT | os.O_EXCL` es atómica (a diferencia de
+    comprobar `exists()` y después escribir, que deja una ventana entre
+    ambos pasos donde dos corridas podrían creer que tomaron el lock)."""
 
     def __init__(self, path):
         self.path = Path(path)
         self._tomado = False
 
+    def _pid_del_lock(self):
+        try:
+            return int(self.path.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            return None
+
     def adquirir(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        if self.path.exists():
+        for _intento in range(2):
             try:
-                pid = int(self.path.read_text(encoding="utf-8").strip())
-            except (OSError, ValueError):
-                pid = None
-            if pid is not None and _pid_vivo(pid):
-                return False
-        self.path.write_text(str(os.getpid()), encoding="utf-8")
-        self._tomado = True
-        return True
+                fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                pid = self._pid_del_lock()
+                if pid is not None and _pid_vivo(pid):
+                    return False
+                try:
+                    self.path.unlink()
+                except OSError:
+                    pass
+                continue
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(str(os.getpid()))
+            self._tomado = True
+            return True
+        return False
 
     def liberar(self):
         if self._tomado:
@@ -188,11 +219,14 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
     base_partes = None
     try:
         servicio = conectar_drive(estado_dir)
-        enlaces = EnlacesDrive(servicio, estado_dir / "drive_enlaces.json")
-        base_partes = ruta_en_mi_unidad(raiz)
     except Exception as e:
         _log(f"Drive no disponible ({e}). Corre: python -m worker.drive")
-        enlaces = None
+    else:
+        try:
+            base_partes = ruta_en_mi_unidad(raiz)
+            enlaces = EnlacesDrive(servicio, estado_dir / "drive_enlaces.json")
+        except ValueError as e:
+            _log(f"✗ DRIVE_ROOT no esta dentro de 'Mi unidad' ni 'My Drive': {e}")
 
     sb = Supabase(config_sb["SUPABASE_URL"], config_sb["SUPABASE_SERVICE_KEY"],
                   config_sb["BC_USER_ID"])
@@ -200,37 +234,54 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
     api = conectar()
 
     resultados = {}
-    for curso_cfg in cursos:
-        nombre = curso_cfg["nombre"]
-        try:
-            snap = snapshot_curso(api, manifest, curso_cfg, api.base)
-        except (LecturaFallida, requests.RequestException) as e:
-            _log(f"✗ {nombre}: no se pudo leer de Canvas, no se publica: {e}")
-            resultados[nombre] = {"ok": False, "error": str(e)}
-            continue
+    try:
+        for curso_cfg in cursos:
+            nombre = curso_cfg["nombre"]
+            try:
+                snap = snapshot_curso(api, manifest, curso_cfg, api.base)
+            except (LecturaFallida, requests.RequestException) as e:
+                _log(f"✗ {nombre}: no se pudo leer de Canvas, no se publica: {e}")
+                resultados[nombre] = {"ok": False, "error": str(e)}
+                continue
 
+            if enlaces is not None:
+                dir_curso = carpeta_curso(raiz, cfg, curso_cfg)
+                curso_partes = base_partes + list(Path(dir_curso).relative_to(raiz).parts)
+                snap["course"]["drive_url"] = enlaces.enlace(curso_partes)
+                for fila in snap["files"]:
+                    fila["drive_url"] = enlaces.enlace(
+                        curso_partes + ["canvas"] + fila["ruta"].split("/"))
+            else:
+                snap["course"]["drive_url"] = None
+                for fila in snap["files"]:
+                    fila["drive_url"] = None
+
+            try:
+                primera_vez = not sb.curso_publicado(snap["course"]["canvas_id"])
+                conteos = sb.publicar_curso(snap, primera_vez)
+            except Exception as e:
+                # Un fallo de Supabase (red, 5xx, etc.) en un ramo no debe
+                # abortar la corrida completa: los demas ramos se publican
+                # igual y la corrida se cierra con ok=False.
+                _log(f"✗ {nombre}: no se pudo publicar en Supabase: {e}")
+                resultados[nombre] = {"ok": False, "error": str(e)}
+                continue
+
+            resultados[nombre] = {"ok": True, "conteos": conteos}
+            _log(f"  {nombre}: publicado en Supabase {conteos}")
+    finally:
         if enlaces is not None:
-            dir_curso = carpeta_curso(raiz, cfg, curso_cfg)
-            curso_partes = base_partes + list(Path(dir_curso).relative_to(raiz).parts)
-            snap["course"]["drive_url"] = enlaces.enlace(curso_partes)
-            for fila in snap["files"]:
-                fila["drive_url"] = enlaces.enlace(
-                    curso_partes + ["canvas"] + fila["ruta"].split("/"))
-        else:
-            snap["course"]["drive_url"] = None
-            for fila in snap["files"]:
-                fila["drive_url"] = None
+            try:
+                enlaces.guardar()
+            except Exception as e:
+                _log(f"✗ no se pudo guardar la cache de enlaces de Drive: {e}")
 
-        primera_vez = not sb.curso_publicado(snap["course"]["canvas_id"])
-        conteos = sb.publicar_curso(snap, primera_vez)
-        resultados[nombre] = {"ok": True, "conteos": conteos}
-        _log(f"  {nombre}: publicado en Supabase {conteos}")
+        ok_total = all(r["ok"] for r in resultados.values())
+        try:
+            sb.cerrar_corrida(run_id, ok_total, resultados)
+        except Exception as e:
+            _log(f"✗ no se pudo cerrar la corrida en Supabase: {e}")
 
-    if enlaces is not None:
-        enlaces.guardar()
-
-    ok_total = all(r["ok"] for r in resultados.values())
-    sb.cerrar_corrida(run_id, ok_total, resultados)
     return resultados
 
 
@@ -264,6 +315,9 @@ def main(argv=None):
             resultados = correr(log=log, sync=not args.sin_sync)
         except ErrorFatal as e:
             log(sanitizar(f"✗ {e}"))
+            return 1
+        except Exception as e:
+            log(sanitizar(f"✗ error inesperado: {e}"))
             return 1
         if any(not r.get("ok") for r in resultados.values()):
             return 1

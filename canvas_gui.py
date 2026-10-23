@@ -293,7 +293,12 @@ def _ejecutar_sync():
             # Config de Supabase presente: la corrida completa del
             # trabajador (sync + publicación) reemplaza al sync solo.
             import worker.run as worker_run
-            resultados = worker_run.correr(log=log)
+            try:
+                resultados = worker_run.correr(log=log)
+            except Exception as e:
+                log(f"✗ {e}")
+                _resumen = {"nuevos": 0, "saltados": 0, "errores": 1}
+                return
             for nombre, r in resultados.items():
                 if r.get("ok"):
                     log(f"  {nombre}: publicado en Supabase")
