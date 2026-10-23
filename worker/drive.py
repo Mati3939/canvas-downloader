@@ -65,15 +65,27 @@ class EnlacesDrive:
 
     def _buscar(self, padre_id, nombre):
         q = f"'{padre_id}' in parents and name = '{_escapar(nombre)}' and trashed = false"
-        resp = self._servicio.files().list(
-            q=q, fields="files(id, name, mimeType, webViewLink)", pageSize=10,
-        ).execute()
+        try:
+            resp = self._servicio.files().list(
+                q=q, fields="files(id, name, mimeType, webViewLink)", pageSize=10,
+            ).execute()
+        except Exception as e:
+            # Falla de la API de Drive (HTTP, red) al resolver esta ruta: no
+            # abortar el lote completo, solo esta ruta (no se cachea, se
+            # reintenta en la próxima corrida). Los errores de programación
+            # (TypeError, AttributeError, etc.) sí se propagan.
+            from googleapiclient.errors import HttpError
+
+            if isinstance(e, (HttpError, OSError)):
+                return None
+            raise
         archivos = resp.get("files", [])
         return archivos[0] if archivos else None
 
-    def enlace(self, partes: list) -> str:
+    def enlace(self, partes: list[str]) -> str | None:
         """webViewLink del archivo o carpeta en `partes` (ruta desde la raíz
-        de Mi unidad). `None` si todavía no existe en Drive."""
+        de Mi unidad). `None` si todavía no existe en Drive o si falló la
+        consulta a la API en algún nivel de la ruta."""
         ruta_completa = "/".join(partes)
         if ruta_completa in self._enlaces:
             return self._enlaces[ruta_completa]
@@ -110,9 +122,10 @@ def conectar_drive(estado_dir: Path, interactivo: bool = False):
     """Servicio de Drive v3 (solo metadata), autenticado con
     `google_client.json` / `google_token.json` en `estado_dir`.
 
-    Sin token utilizable y `interactivo=False` lanza `DriveNoAutorizado`.
-    Con `interactivo=True` corre el flujo `InstalledAppFlow` (abre el
-    navegador) y guarda el token nuevo.
+    Sin token utilizable (falta, corrupto, o refresh falló) y
+    `interactivo=False` lanza `DriveNoAutorizado`. Con `interactivo=True`,
+    esos mismos casos caen al flujo `InstalledAppFlow` (abre el navegador) y
+    guardan el token nuevo.
     """
     estado_dir = Path(estado_dir)
     cliente_path = estado_dir / "google_client.json"
@@ -123,20 +136,26 @@ def conectar_drive(estado_dir: Path, interactivo: bool = False):
             "No hay token de Drive. Corre: python -m worker.drive"
         )
 
+    from google.auth.exceptions import GoogleAuthError
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
 
-    creds = None
     if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
-        if creds and creds.valid:
-            return build("drive", "v3", credentials=creds)
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            token_path.write_text(creds.to_json(), encoding="utf-8")
-            return build("drive", "v3", credentials=creds)
+        try:
+            creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+            if creds.valid:
+                return build("drive", "v3", credentials=creds)
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                token_path.write_text(creds.to_json(), encoding="utf-8")
+                return build("drive", "v3", credentials=creds)
+        except (ValueError, GoogleAuthError):
+            # Token corrupto (JSON invalido) o refresh fallido (revocado,
+            # expirado sin refresh_token, o error de red/transporte de
+            # Google): se trata igual que "sin token utilizable".
+            pass
 
     if not interactivo:
         raise DriveNoAutorizado(

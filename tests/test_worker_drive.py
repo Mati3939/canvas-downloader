@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -159,11 +160,130 @@ class TestEnlacesDrive(unittest.TestCase):
         self.assertEqual(len(servicio_nuevo.consultas), 0)
 
 
+class _ServicioQueFalla:
+    """Servicio falso cuyo `list().execute()` lanza la excepcion dada."""
+
+    def __init__(self, excepcion):
+        self._excepcion = excepcion
+        self.consultas = []
+
+    def files(self):
+        return self
+
+    def list(self, q, fields=None, pageSize=None):
+        self.consultas.append(q)
+        return self
+
+    def execute(self):
+        raise self._excepcion
+
+
+class _RespuestaHttpFalsa(dict):
+    status = 500
+    reason = "Error de prueba"
+
+
+def _http_error_de_prueba():
+    from googleapiclient.errors import HttpError
+
+    resp = _RespuestaHttpFalsa({"status": "500"})
+    return HttpError(resp, b'{"error": "boom"}')
+
+
+class TestEnlaceErroresDeApi(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.cache_path = Path(self.tmp) / "drive_cache.json"
+
+    def test_http_error_devuelve_none_y_no_cachea(self):
+        servicio = _ServicioQueFalla(_http_error_de_prueba())
+        e = EnlacesDrive(servicio, self.cache_path)
+        self.assertIsNone(e.enlace(["Campus", "a.pdf"]))
+        e.guardar()
+        self.assertNotIn("a.pdf", self.cache_path.read_text(encoding="utf-8"))
+
+    def test_error_de_red_devuelve_none(self):
+        servicio = _ServicioQueFalla(ConnectionError("sin red"))
+        e = EnlacesDrive(servicio, self.cache_path)
+        self.assertIsNone(e.enlace(["Campus", "a.pdf"]))
+
+    def test_error_de_programacion_no_se_traga(self):
+        servicio = _ServicioQueFalla(TypeError("bug en el fake"))
+        e = EnlacesDrive(servicio, self.cache_path)
+        with self.assertRaises(TypeError):
+            e.enlace(["Campus", "a.pdf"])
+
+
 class TestConectarDrive(unittest.TestCase):
     def test_sin_token_y_no_interactivo_lanza_excepcion(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(DriveNoAutorizado):
                 conectar_drive(Path(tmp), interactivo=False)
+
+    def test_token_corrupto_y_no_interactivo_lanza_excepcion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "google_token.json").write_text("esto no es json", encoding="utf-8")
+            with self.assertRaises(DriveNoAutorizado):
+                conectar_drive(Path(tmp), interactivo=False)
+
+    def test_refresh_fallido_y_no_interactivo_lanza_excepcion(self):
+        from google.auth.exceptions import RefreshError
+
+        creds_falsas = mock.Mock(valid=False, expired=True, refresh_token="r")
+        creds_falsas.refresh.side_effect = RefreshError("revocado")
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "google_token.json").write_text("{}", encoding="utf-8")
+            with mock.patch(
+                "google.oauth2.credentials.Credentials.from_authorized_user_file",
+                return_value=creds_falsas,
+            ):
+                with self.assertRaises(DriveNoAutorizado):
+                    conectar_drive(Path(tmp), interactivo=False)
+
+    def test_token_corrupto_e_interactivo_cae_al_flujo_interactivo(self):
+        creds_nuevas = mock.Mock()
+        creds_nuevas.to_json.return_value = "{}"
+        flow_falso = mock.Mock()
+        flow_falso.run_local_server.return_value = creds_nuevas
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "google_token.json").write_text("esto no es json", encoding="utf-8")
+            (Path(tmp) / "google_client.json").write_text("{}", encoding="utf-8")
+            with mock.patch(
+                "google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file",
+                return_value=flow_falso,
+            ), mock.patch(
+                "googleapiclient.discovery.build", return_value="servicio-falso",
+            ):
+                servicio = conectar_drive(Path(tmp), interactivo=True)
+        self.assertEqual(servicio, "servicio-falso")
+        flow_falso.run_local_server.assert_called_once()
+
+    def test_refresh_fallido_e_interactivo_cae_al_flujo_interactivo(self):
+        from google.auth.exceptions import RefreshError
+
+        creds_viejas = mock.Mock(valid=False, expired=True, refresh_token="r")
+        creds_viejas.refresh.side_effect = RefreshError("revocado")
+        creds_nuevas = mock.Mock()
+        creds_nuevas.to_json.return_value = "{}"
+        flow_falso = mock.Mock()
+        flow_falso.run_local_server.return_value = creds_nuevas
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "google_token.json").write_text("{}", encoding="utf-8")
+            (Path(tmp) / "google_client.json").write_text("{}", encoding="utf-8")
+            with mock.patch(
+                "google.oauth2.credentials.Credentials.from_authorized_user_file",
+                return_value=creds_viejas,
+            ), mock.patch(
+                "google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file",
+                return_value=flow_falso,
+            ), mock.patch(
+                "googleapiclient.discovery.build", return_value="servicio-falso",
+            ):
+                servicio = conectar_drive(Path(tmp), interactivo=True)
+        self.assertEqual(servicio, "servicio-falso")
+        flow_falso.run_local_server.assert_called_once()
 
 
 if __name__ == "__main__":
