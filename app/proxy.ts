@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const RUTAS_PUBLICAS = ["/login", "/auth/callback"];
+const RUTAS_PUBLICAS = ["/login", "/auth/callback", "/acerca", "/privacidad"];
 
 function esRutaPublica(pathname: string) {
   return RUTAS_PUBLICAS.some(
@@ -10,8 +10,8 @@ function esRutaPublica(pathname: string) {
 }
 
 /**
- * Protege todas las rutas salvo login y el callback de OAuth: sin sesion,
- * redirige a /login. Sigue el patron getAll/setAll de @supabase/ssr para
+ * Protege todas las rutas salvo las publicas (login, callback de OAuth,
+ * acerca y privacidad): sin sesion, redirige a /login. Sigue el patron getAll/setAll de @supabase/ssr para
  * refrescar la sesion en cada peticion.
  */
 export async function proxy(request: NextRequest) {

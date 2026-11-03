@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -66,6 +67,15 @@ export default function LoginPage() {
           {error}
         </p>
       ) : null}
+
+      <nav className="flex gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+        <Link href="/acerca" className="underline">
+          Acerca de
+        </Link>
+        <Link href="/privacidad" className="underline">
+          Privacidad
+        </Link>
+      </nav>
     </main>
   );
 }
