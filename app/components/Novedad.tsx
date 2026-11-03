@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Novedad as TipoNovedad } from "@/lib/novedades";
 import { tiempoRelativo } from "@/lib/fechas";
 
@@ -31,14 +32,23 @@ export function Novedad({
           {tiempoRelativo(novedad.fecha, ahora)}
         </span>
       </div>
-      <a
-        href={novedad.href}
-        target="_blank"
-        rel="noreferrer"
-        className="text-sm font-medium text-zinc-900 underline-offset-2 hover:underline dark:text-zinc-50"
-      >
-        {novedad.titulo}
-      </a>
+      {novedad.href.startsWith("/") ? (
+        <Link
+          href={novedad.href}
+          className="text-sm font-medium text-zinc-900 underline-offset-2 hover:underline dark:text-zinc-50"
+        >
+          {novedad.titulo}
+        </Link>
+      ) : (
+        <a
+          href={novedad.href}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm font-medium text-zinc-900 underline-offset-2 hover:underline dark:text-zinc-50"
+        >
+          {novedad.titulo}
+        </a>
+      )}
       {novedad.adjuntos && novedad.adjuntos.length > 0 ? (
         <ul className="mt-1 flex flex-col gap-1">
           {novedad.adjuntos.map((adjunto) => (

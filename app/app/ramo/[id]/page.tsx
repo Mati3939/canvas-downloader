@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EnlaceVolver } from "@/components/EnlaceVolver";
+import {
+  COLUMNAS_ANUNCIO_RESUMEN,
+  FilaAnuncio,
+  type AnuncioResumen,
+} from "@/components/FilaAnuncio";
 import { FilaArchivo } from "@/components/FilaArchivo";
+import { FilaTarea } from "@/components/FilaTarea";
 import { ListaModulos, type ItemModuloResumen, type ModuloResumen } from "@/components/ListaModulos";
 import { MensajeError } from "@/components/MensajeError";
 import { Novedad } from "@/components/Novedad";
@@ -14,6 +21,7 @@ import {
   type TareaParaNovedades,
 } from "@/lib/novedades";
 import { createClient } from "@/lib/supabase/server";
+import { COLUMNAS_TAREA_RESUMEN, ordenarTareas, type TareaResumen } from "@/lib/tareas";
 import type { Archivo, Curso } from "@/lib/tipos";
 
 const DIAS_LO_NUEVO = 30;
@@ -25,15 +33,17 @@ const COLUMNAS_MODULOS = "canvas_id, name, position";
 const COLUMNAS_ITEMS =
   "canvas_id, module_id, position, title, type, file_id, external_url, canvas_url";
 
-type Pestana = "nuevo" | "material" | "modulos";
-const PESTANAS: { valor: Pestana; etiqueta: string }[] = [
+const PESTANAS = [
   { valor: "nuevo", etiqueta: "Lo nuevo" },
+  { valor: "anuncios", etiqueta: "Anuncios" },
+  { valor: "tareas", etiqueta: "Tareas" },
   { valor: "material", etiqueta: "Material" },
   { valor: "modulos", etiqueta: "Modulos" },
-];
+] as const;
+type Pestana = (typeof PESTANAS)[number]["valor"];
 
 function esPestana(valor: string | undefined): valor is Pestana {
-  return valor === "nuevo" || valor === "material" || valor === "modulos";
+  return PESTANAS.some((p) => p.valor === valor);
 }
 
 export default async function PaginaRamo({
@@ -56,8 +66,16 @@ export default async function PaginaRamo({
   const ahora = new Date();
   const desde = new Date(ahora.getTime() - DIAS_LO_NUEVO * MS_POR_DIA);
 
-  const [cursoRes, anunciosRes, tareasRes, archivosRes, modulosRes, itemsRes] =
-    await Promise.all([
+  const [
+    cursoRes,
+    anunciosRes,
+    tareasRes,
+    archivosRes,
+    modulosRes,
+    itemsRes,
+    todosAnunciosRes,
+    todasTareasRes,
+  ] = await Promise.all([
       supabase
         .from("courses")
         .select(COLUMNAS_CURSO)
@@ -84,6 +102,15 @@ export default async function PaginaRamo({
         .select(COLUMNAS_ITEMS)
         .eq("course_id", cursoId)
         .order("position", { ascending: true }),
+      supabase
+        .from("announcements")
+        .select(COLUMNAS_ANUNCIO_RESUMEN)
+        .eq("course_id", cursoId)
+        .order("posted_at", { ascending: false }),
+      supabase
+        .from("assignments")
+        .select(COLUMNAS_TAREA_RESUMEN)
+        .eq("course_id", cursoId),
     ]);
 
   if (cursoRes.error) {
@@ -96,7 +123,13 @@ export default async function PaginaRamo({
   }
 
   const error =
-    anunciosRes.error ?? tareasRes.error ?? archivosRes.error ?? modulosRes.error ?? itemsRes.error;
+        anunciosRes.error ??
+    tareasRes.error ??
+    archivosRes.error ??
+    modulosRes.error ??
+    itemsRes.error ??
+    todosAnunciosRes.error ??
+    todasTareasRes.error;
 
   if (error) {
     console.error("Error de Supabase cargando el ramo:", error.message);
@@ -112,6 +145,11 @@ export default async function PaginaRamo({
   const archivos = (archivosRes.data ?? []) as Archivo[];
   const modulos = (modulosRes.data ?? []) as ModuloResumen[];
   const items = (itemsRes.data ?? []) as ItemModuloResumen[];
+  const todosAnuncios = (todosAnunciosRes.data ?? []) as AnuncioResumen[];
+  const tareasOrdenadas = ordenarTareas(
+    (todasTareasRes.data ?? []) as TareaResumen[],
+    ahora,
+  );
 
   const novedades = armarNovedades(anuncios, tareas, archivos, desde);
   const grupos = agruparMaterial(archivos);
@@ -119,6 +157,7 @@ export default async function PaginaRamo({
 
   return (
     <main className="flex flex-1 flex-col gap-6 bg-zinc-50 px-4 py-6 dark:bg-black">
+      <EnlaceVolver href="/" texto="Inicio" />
       <header className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -152,15 +191,15 @@ export default async function PaginaRamo({
         </div>
       </header>
 
-      <nav className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
+      <nav className="-mx-4 flex gap-1 overflow-x-auto border-b px-4 border-zinc-200 dark:border-zinc-800">
         {PESTANAS.map((p) => (
           <Link
             key={p.valor}
             href={p.valor === "nuevo" ? "?" : `?tab=${p.valor}`}
             className={
               p.valor === pestana
-                ? "border-b-2 border-zinc-900 px-3 py-2 text-sm font-semibold text-zinc-900 dark:border-zinc-50 dark:text-zinc-50"
-                : "border-b-2 border-transparent px-3 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+                ? "shrink-0 border-b-2 border-zinc-900 px-3 py-2 text-sm font-semibold text-zinc-900 dark:border-zinc-50 dark:text-zinc-50"
+                : "shrink-0 border-b-2 border-transparent px-3 py-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
             }
           >
             {p.etiqueta}
@@ -185,6 +224,53 @@ export default async function PaginaRamo({
             ))}
           </ul>
         )
+      ) : null}
+
+      {pestana === "anuncios" ? (
+        todosAnuncios.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Este ramo no tiene anuncios.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {todosAnuncios.map((anuncio) => (
+              <FilaAnuncio key={anuncio.canvas_id} anuncio={anuncio} />
+            ))}
+          </ul>
+        )
+      ) : null}
+
+      {pestana === "tareas" ? (
+        <div className="flex flex-col gap-5">
+          {(
+            [
+              ["Proximas", tareasOrdenadas.proximas],
+              ["Sin fecha", tareasOrdenadas.sinFecha],
+              ["Pasadas", tareasOrdenadas.pasadas],
+            ] as const
+          ).map(([titulo, lista]) =>
+            lista.length > 0 ? (
+              <section key={titulo} className="flex flex-col gap-2">
+                <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  {titulo}
+                </h2>
+                <ul className="flex flex-col gap-2">
+                  {lista.map((tarea) => (
+                    <FilaTarea key={tarea.canvas_id} tarea={tarea} ahora={ahora} />
+                  ))}
+                </ul>
+              </section>
+            ) : null,
+          )}
+          {tareasOrdenadas.proximas.length +
+            tareasOrdenadas.sinFecha.length +
+            tareasOrdenadas.pasadas.length ===
+          0 ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Este ramo no tiene tareas.
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {pestana === "material" ? (

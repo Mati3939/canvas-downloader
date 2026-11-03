@@ -98,7 +98,7 @@ export function armarNovedades(
       courseId: anuncio.course_id,
       titulo: anuncio.title,
       fecha: anuncio.posted_at,
-      href: anuncio.canvas_url,
+      href: `/anuncio/${anuncio.canvas_id}`,
       adjuntos,
     });
   }
@@ -110,7 +110,7 @@ export function armarNovedades(
       courseId: tarea.course_id,
       titulo: tarea.name,
       fecha: tarea.first_seen_at,
-      href: tarea.canvas_url,
+      href: `/tarea/${tarea.canvas_id}`,
     });
   }
 

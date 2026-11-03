@@ -47,3 +47,33 @@ export function horasDesde(
 ): number {
   return (ahora.getTime() - new Date(fecha).getTime()) / 3_600_000;
 }
+
+/**
+ * Fecha de entrega con dia de la semana, en America/Santiago,
+ * p.ej. "jue 5 nov, 23:59".
+ */
+export function fechaEntrega(fecha: string | Date): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    timeZone: ZONA,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(fecha));
+}
+
+/**
+ * Fecha larga en America/Santiago, p.ej. "martes, 3 de noviembre de 2026, 14:32".
+ */
+export function fechaLarga(fecha: string | Date): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    timeZone: ZONA,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(fecha));
+}
