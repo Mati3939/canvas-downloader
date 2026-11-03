@@ -80,6 +80,10 @@ class FakeSupabase:
     def cerrar_corrida(self, run_id, ok, summary):
         self.cerradas.append((run_id, ok, summary))
 
+    def publicar_eventos(self, filas, desde, hasta):
+        self.eventos = (filas, desde, hasta)
+        return len(filas)
+
 
 class FakeEnlacesDrive:
     """Registra cada partes pedida y devuelve un enlace previsible."""
@@ -128,10 +132,76 @@ class BaseRunTest(unittest.TestCase):
             Supabase=lambda url, key, user: self.fake_sb,
             conectar_drive=lambda estado_dir: "servicio-falso",
             EnlacesDrive=self._enlaces_cls,
+            conectar_calendario=_sin_calendario,
             manifest_path=self.manifest_path,
         )
         base.update(overrides)
         return base
+
+
+def _sin_calendario(estado_dir):
+    raise RuntimeError("calendario no configurado")
+
+
+class _ServicioCalendarioFalso:
+    def __init__(self, items):
+        self._items = items
+
+    def events(self):
+        return self
+
+    def list(self, **kwargs):
+        self.kwargs = kwargs
+        return self
+
+    def execute(self):
+        return {"items": self._items}
+
+
+class TestCalendario(BaseRunTest):
+    def _snapshot(self, api, manifest, curso_cfg, base_url):
+        return _snap(curso_cfg["canvas_course_id"], curso_cfg["nombre"])
+
+    def test_sin_calendario_deja_aviso_y_la_corrida_sigue_ok(self):
+        resultados = run.correr(log=self.log, sync=False, **self._kwargs(self._snapshot))
+        self.assertEqual(resultados["_calendario"]["ok"], True)
+        self.assertIn("aviso", resultados["_calendario"])
+        self.assertTrue(self.fake_sb.cerradas[-1][1])
+
+    def test_publica_clases_y_evaluaciones(self):
+        items = [
+            {"id": "c1", "summary": "Clase", "description": "[Horario S4]",
+             "start": {"dateTime": "2026-11-03T08:30:00-03:00"},
+             "end": {"dateTime": "2026-11-03T10:00:00-03:00"}},
+            {"id": "e1", "summary": "Certamen 2 - Bases de Datos",
+             "start": {"dateTime": "2026-11-05T11:15:00-03:00"},
+             "end": {"dateTime": "2026-11-05T13:45:00-03:00"}},
+            {"id": "x1", "summary": "Cumpleanos",
+             "start": {"date": "2026-11-06"}, "end": {"date": "2026-11-07"}},
+        ]
+        servicio = _ServicioCalendarioFalso(items)
+        resultados = run.correr(
+            log=self.log, sync=False,
+            **self._kwargs(self._snapshot, conectar_calendario=lambda d: servicio))
+        self.assertEqual(resultados["_calendario"],
+                         {"ok": True, "conteos": {"calendar_events": 2}})
+        filas, desde, hasta = self.fake_sb.eventos
+        self.assertEqual([(f["google_id"], f["kind"]) for f in filas],
+                         [("c1", "clase"), ("e1", "evaluacion")])
+        self.assertLess(desde, hasta)
+
+    def test_error_al_publicar_calendario_marca_la_corrida(self):
+        def falla(filas, desde, hasta):
+            raise RuntimeError("Supabase 500 Bearer secreto123456")
+
+        self.fake_sb.publicar_eventos = falla
+        servicio = _ServicioCalendarioFalso([])
+        resultados = run.correr(
+            log=self.log, sync=False,
+            **self._kwargs(self._snapshot, conectar_calendario=lambda d: servicio))
+        self.assertFalse(resultados["_calendario"]["ok"])
+        self.assertNotIn("secreto123456", resultados["_calendario"]["error"])
+        self.assertFalse(self.fake_sb.cerradas[-1][1])
 
 
 class TestRamoQueFalla(BaseRunTest):

@@ -32,6 +32,8 @@ from sync_ramos import sincronizar as _sincronizar
 from sync_ramos import verificar_drive_root as _verificar_drive_root
 from worker.drive import EnlacesDrive as _EnlacesDrive
 from worker.drive import conectar_drive as _conectar_drive
+from worker.drive import conectar_calendario as _conectar_calendario
+from worker import calendario as _calendario
 from worker.drive import ruta_en_mi_unidad
 from worker.snapshot import LecturaFallida
 from worker.snapshot import snapshot_curso as _snapshot_curso
@@ -151,6 +153,29 @@ class _LockCorrida:
 
 # --------------------------------------------------------------------- corrida
 
+def _publicar_calendario(log, env, estado_dir, sb, conectar_calendario):
+    """Publica clases y evaluaciones de Google Calendar. Sin autorizacion de
+    Calendar solo deja un aviso (la corrida sigue ok); un error al leer o
+    publicar si marca la corrida con errores."""
+    try:
+        servicio = conectar_calendario(estado_dir)
+    except Exception as e:
+        mensaje = sanitizar(str(e))
+        log(f"Calendario no disponible ({mensaje})")
+        return {"ok": True, "aviso": mensaje}
+    try:
+        desde, hasta = _calendario.ventana()
+        marca = env.get("HORARIO_MARCA") or _calendario.MARCA_HORARIO_POR_DEFECTO
+        filas = _calendario.leer_eventos(servicio, desde, hasta, marca)
+        n = sb.publicar_eventos(filas, desde.isoformat(), hasta.isoformat())
+    except Exception as e:
+        mensaje = sanitizar(str(e))
+        log(f"✗ no se pudo publicar el calendario: {mensaje}")
+        return {"ok": False, "error": mensaje}
+    log(f"  Calendario: {n} eventos publicados")
+    return {"ok": True, "conteos": {"calendar_events": n}}
+
+
 def correr(log=print, sync=True, *,
            estado_dir=ESTADO_DIR,
            leer_env=_leer_env,
@@ -163,6 +188,7 @@ def correr(log=print, sync=True, *,
            Supabase=_Supabase,
            conectar_drive=_conectar_drive,
            EnlacesDrive=_EnlacesDrive,
+           conectar_calendario=_conectar_calendario,
            manifest_path=None):
     """Corrida completa: sincroniza (si `sync`) y publica cada ramo en
     Supabase con sus enlaces de Drive. Devuelve
@@ -184,7 +210,7 @@ def correr(log=print, sync=True, *,
             verificar_drive_root=verificar_drive_root, sincronizar=sincronizar,
             conectar=conectar, snapshot_curso=snapshot_curso, Supabase=Supabase,
             conectar_drive=conectar_drive, EnlacesDrive=EnlacesDrive,
-            manifest_path=manifest_path,
+            conectar_calendario=conectar_calendario, manifest_path=manifest_path,
         )
     finally:
         lock.liberar()
@@ -192,7 +218,7 @@ def correr(log=print, sync=True, *,
 
 def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_root,
             verificar_drive_root, sincronizar, conectar, snapshot_curso, Supabase,
-            conectar_drive, EnlacesDrive, manifest_path):
+            conectar_drive, EnlacesDrive, conectar_calendario, manifest_path):
     def _log(msg=""):
         log(sanitizar(msg))
 
@@ -276,6 +302,9 @@ def _correr(*, log, sync, estado_dir, leer_env, cargar_config, resolver_drive_ro
 
             resultados[nombre] = {"ok": True, "conteos": conteos}
             _log(f"  {nombre}: publicado en Supabase {conteos}")
+
+        resultados["_calendario"] = _publicar_calendario(
+            _log, env, estado_dir, sb, conectar_calendario)
     except Exception as e:
         # Un error que se escapa del recorrido por ramo (por ejemplo no
         # poder conectar a Canvas) no debe dejar la corrida "ok" solo

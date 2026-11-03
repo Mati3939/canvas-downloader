@@ -7,6 +7,8 @@ se registra la key ni headers en los mensajes de error.
 """
 from datetime import datetime, timezone
 
+from urllib.parse import urlencode
+
 import requests
 
 # Tablas hijas de un curso, podadas por (user_id, course_id) tras el upsert.
@@ -71,6 +73,33 @@ class Supabase:
             timeout=_TIMEOUT,
         )
         self._revisar(resp, tabla)
+
+    def publicar_eventos(self, filas: list[dict], desde: str, hasta: str) -> int:
+        """Upsert de los eventos de calendario y poda de los que ya no estan
+        dentro de la ventana [desde, hasta). Devuelve cuantos se publicaron."""
+        if filas:
+            resp = self._session.post(
+                f"{self._url}/rest/v1/calendar_events?on_conflict=user_id,google_id",
+                json=[{**f, "user_id": self._user_id} for f in filas],
+                headers=self._headers({"Prefer": "resolution=merge-duplicates,return=minimal"}),
+                timeout=_TIMEOUT,
+            )
+            self._revisar(resp, "calendar_events")
+        params = [
+            ("user_id", f"eq.{self._user_id}"),
+            ("start_at", f"gte.{desde}"),
+            ("start_at", f"lt.{hasta}"),
+        ]
+        if filas:
+            ids = ",".join('"' + f["google_id"].replace('"', "") + '"' for f in filas)
+            params.append(("google_id", f"not.in.({ids})"))
+        resp = self._session.delete(
+            f"{self._url}/rest/v1/calendar_events?{urlencode(params)}",
+            headers=self._headers(),
+            timeout=_TIMEOUT,
+        )
+        self._revisar(resp, "calendar_events")
+        return len(filas)
 
     def publicar_curso(self, snap: dict, primera_vez: bool) -> dict:
         """Upsert del curso (sin marcarlo publicado todavia), luego de sus

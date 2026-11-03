@@ -87,3 +87,17 @@ export type CorridaTrabajador = {
   ok: boolean | null;
   summary: Record<string, unknown>;
 };
+
+export type EventoCalendario = {
+  user_id: string;
+  google_id: string;
+  title: string;
+  location: string | null;
+  description: string | null;
+  start_at: string;
+  end_at: string;
+  all_day: boolean;
+  kind: "clase" | "evaluacion";
+  html_link: string | null;
+  updated_at: string;
+};

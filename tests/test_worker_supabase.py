@@ -4,6 +4,7 @@ tests/test_worker_snapshot.py)."""
 import sys
 import unittest
 from pathlib import Path
+from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -336,3 +337,28 @@ class TestCorridas(BaseSupabaseTest):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEventos(unittest.TestCase):
+    def setUp(self):
+        self.session = FakeSession()
+        self.sb = Supabase(URL, KEY, USER, session=self.session)
+
+    def test_upsert_y_poda_en_la_ventana(self):
+        filas = [{"google_id": "a_1", "title": "Clase"}, {"google_id": "b_2", "title": "Certamen"}]
+        n = self.sb.publicar_eventos(filas, "2026-11-01T00:00:00+00:00", "2026-12-01T00:00:00+00:00")
+        self.assertEqual(n, 2)
+        post, delete = self.session.llamadas
+        self.assertIn("calendar_events?on_conflict=user_id,google_id", post["url"])
+        self.assertTrue(all(f["user_id"] == USER for f in post["json"]))
+        url = unquote(delete["url"])
+        self.assertIn(f"user_id=eq.{USER}", url)
+        self.assertIn("start_at=gte.2026-11-01T00:00:00+00:00", url)
+        self.assertIn("start_at=lt.2026-12-01T00:00:00+00:00", url)
+        self.assertIn('google_id=not.in.("a_1","b_2")', url)
+
+    def test_sin_eventos_borra_toda_la_ventana(self):
+        self.sb.publicar_eventos([], "2026-11-01T00:00:00+00:00", "2026-12-01T00:00:00+00:00")
+        (delete,) = self.session.llamadas
+        self.assertEqual(delete["metodo"], "DELETE")
+        self.assertNotIn("not.in", unquote(delete["url"]))

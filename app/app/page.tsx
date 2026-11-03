@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { Encabezado } from "@/components/Encabezado";
 import { EstadoTrabajador } from "@/components/EstadoTrabajador";
 import { MensajeError } from "@/components/MensajeError";
+import { FilaEvento } from "@/components/FilaEvento";
 import { FilaTarea } from "@/components/FilaTarea";
 import { Novedad } from "@/components/Novedad";
 import { TarjetaRamo } from "@/components/TarjetaRamo";
@@ -13,6 +15,13 @@ import {
   type AnuncioParaNovedades,
   type TareaParaNovedades,
 } from "@/lib/novedades";
+import {
+  claveDia,
+  COLUMNAS_EVENTO,
+  nombreDia,
+  ramoDeEvento,
+  type EventoResumen,
+} from "@/lib/horario";
 import { createClient } from "@/lib/supabase/server";
 import {
   COLUMNAS_TAREA_RESUMEN,
@@ -22,7 +31,7 @@ import {
 import type { Archivo, CorridaTrabajador, Curso } from "@/lib/tipos";
 
 const DIAS_LO_NUEVO = 14;
-const DIAS_ENTREGAS = 7;
+const DIAS_ENTREGAS = 14;
 const MENSAJE_ERROR =
   "No se pudo cargar la informacion de tus ramos. Intenta de nuevo mas tarde.";
 
@@ -38,6 +47,7 @@ export default async function Home() {
     archivosRes,
     corridaRes,
     entregasRes,
+    eventosRes,
   ] = await Promise.all([
     supabase
       .from("courses")
@@ -68,6 +78,15 @@ export default async function Home() {
         "canvas_due_at",
         new Date(ahora.getTime() + DIAS_ENTREGAS * MS_POR_DIA).toISOString(),
       ),
+    supabase
+      .from("calendar_events")
+      .select(COLUMNAS_EVENTO)
+      .gte("start_at", new Date(ahora.getTime() - MS_POR_DIA).toISOString())
+      .lte(
+        "start_at",
+        new Date(ahora.getTime() + DIAS_ENTREGAS * MS_POR_DIA).toISOString(),
+      )
+      .order("start_at", { ascending: true }),
   ]);
 
   const error =
@@ -76,7 +95,8 @@ export default async function Home() {
     tareasRes.error ??
     archivosRes.error ??
     corridaRes.error ??
-    entregasRes.error;
+    entregasRes.error ??
+    eventosRes.error;
 
   if (error) {
     console.error(
@@ -105,35 +125,99 @@ export default async function Home() {
     DIAS_ENTREGAS,
   );
 
+  const eventos = (eventosRes.data ?? []) as EventoResumen[];
+  const hoy = claveDia(ahora);
+  const eventosHoy = eventos.filter((e) => claveDia(e.start_at) === hoy);
+  const evaluaciones = eventos.filter(
+    (e) => e.kind === "evaluacion" && new Date(e.end_at) > ahora,
+  );
+  const colorDeEvento = (titulo: string) => {
+    const curso = ramoDeEvento(titulo, cursos);
+    return curso ? colorRamo(curso) : undefined;
+  };
+  const pendientes = [
+    ...entregas.map((t) => ({
+      clave: `t-${t.canvas_id}`,
+      fecha: t.canvas_due_at as string,
+      nodo: (
+        <FilaTarea
+          key={`t-${t.canvas_id}`}
+          tarea={t}
+          ahora={ahora}
+          nombreRamo={nombrePorCurso.get(t.course_id) ?? "Ramo"}
+          colorRamo={colorPorCurso.get(t.course_id)}
+        />
+      ),
+    })),
+    ...evaluaciones.map((e) => ({
+      clave: `e-${e.google_id}`,
+      fecha: e.start_at,
+      nodo: (
+        <FilaEvento
+          key={`e-${e.google_id}`}
+          evento={e}
+          colorRamo={colorDeEvento(e.title)}
+          ahora={ahora}
+          conDia
+        />
+      ),
+    })),
+  ].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
   return (
     <>
       <Encabezado />
       <main className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 content-start gap-8 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10 lg:px-8 lg:py-10">
         <section className="flex flex-col gap-3 lg:col-start-1">
-          <h1 className="text-base font-semibold text-texto">
-            Proximas entregas
-          </h1>
-          {entregas.length === 0 ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <h1 className="text-base font-semibold text-texto">
+              Hoy{" "}
+              <span className="font-normal text-texto-2 capitalize">
+                · {nombreDia(hoy)}
+              </span>
+            </h1>
+            <Link
+              href="/horario"
+              className="text-xs font-medium text-acento hover:underline"
+            >
+              Ver horario →
+            </Link>
+          </div>
+          {eventosHoy.length === 0 ? (
             <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
-              No hay entregas con fecha en Canvas en los proximos{" "}
-              {DIAS_ENTREGAS} dias.
+              Hoy no tienes clases ni evaluaciones en tu calendario.
             </p>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {entregas.map((tarea) => (
-                <FilaTarea
-                  key={tarea.canvas_id}
-                  tarea={tarea}
+            <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+              {eventosHoy.map((e) => (
+                <FilaEvento
+                  key={e.google_id}
+                  evento={e}
+                  colorRamo={colorDeEvento(e.title)}
                   ahora={ahora}
-                  nombreRamo={nombrePorCurso.get(tarea.course_id) ?? "Ramo"}
-                  colorRamo={colorPorCurso.get(tarea.course_id)}
                 />
               ))}
             </ul>
           )}
         </section>
 
-        <aside className="flex flex-col gap-3 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <section className="flex flex-col gap-3 lg:col-start-1">
+          <h2 className="text-base font-semibold text-texto">
+            Proximas entregas y evaluaciones
+          </h2>
+          {pendientes.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
+              No hay entregas con fecha ni evaluaciones en los proximos{" "}
+              {DIAS_ENTREGAS} dias.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {pendientes.map((p) => p.nodo)}
+            </ul>
+          )}
+        </section>
+
+        <aside className="flex flex-col gap-3 lg:col-start-2 lg:row-span-3 lg:row-start-1">
           <h2 className="text-base font-semibold text-texto">Tus ramos</h2>
           {cursos.length === 0 ? (
             <p className="text-sm text-texto-2">

@@ -3,19 +3,26 @@ sincronizado por Google Drive para Escritorio y devuelve su `webViewLink`,
 para publicarlo junto con cada archivo/ramo en Supabase.
 
 Solo lectura de metadata (`drive.metadata.readonly`); nunca se sube ni se
-modifica nada en Drive.
+modifica nada en Drive. La misma autorizacion de Google incluye lectura de
+Calendar (`calendar.readonly`), que usa worker/calendario.py.
 """
 import json
 from pathlib import Path
 
 from sync_ramos import guardar_json_atomico
 
-SCOPES = ["https://www.googleapis.com/auth/drive.metadata.readonly"]
+SCOPE_DRIVE = "https://www.googleapis.com/auth/drive.metadata.readonly"
+SCOPE_CALENDARIO = "https://www.googleapis.com/auth/calendar.readonly"
+SCOPES = [SCOPE_DRIVE, SCOPE_CALENDARIO]
 _MIME_CARPETA = "application/vnd.google-apps.folder"
 
 
 class DriveNoAutorizado(Exception):
     """No hay un token de Drive utilizable. Corre: python -m worker.drive"""
+
+
+class CalendarioNoAutorizado(Exception):
+    """El token de Google no incluye Calendar. Corre: python -m worker.drive"""
 
 
 def ruta_en_mi_unidad(drive_root: Path) -> list[str]:
@@ -118,14 +125,21 @@ class EnlacesDrive:
         return None
 
 
-def conectar_drive(estado_dir: Path, interactivo: bool = False):
-    """Servicio de Drive v3 (solo metadata), autenticado con
-    `google_client.json` / `google_token.json` en `estado_dir`.
+def _tiene_scopes(creds, scopes) -> bool:
+    try:
+        return bool(creds.has_scopes(scopes))
+    except Exception:
+        return False
 
-    Sin token utilizable (falta, corrupto, o refresh falló) y
+
+def credenciales_google(estado_dir: Path, interactivo: bool = False):
+    """Credenciales de Google del trabajador, desde `google_token.json` en
+    `estado_dir` (con los scopes que ese token tenga).
+
+    Sin token utilizable (falta, corrupto, o refresh fallo) y
     `interactivo=False` lanza `DriveNoAutorizado`. Con `interactivo=True`,
-    esos mismos casos caen al flujo `InstalledAppFlow` (abre el navegador) y
-    guardan el token nuevo.
+    esos casos, y un token al que le falte algun scope de `SCOPES`, caen al
+    flujo `InstalledAppFlow` (abre el navegador) y guardan el token nuevo.
     """
     estado_dir = Path(estado_dir)
     cliente_path = estado_dir / "google_client.json"
@@ -140,17 +154,15 @@ def conectar_drive(estado_dir: Path, interactivo: bool = False):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build
 
     if token_path.exists():
         try:
-            creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
-            if creds.valid:
-                return build("drive", "v3", credentials=creds)
-            if creds.expired and creds.refresh_token:
+            creds = Credentials.from_authorized_user_file(str(token_path))
+            if not creds.valid and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
                 token_path.write_text(creds.to_json(), encoding="utf-8")
-                return build("drive", "v3", credentials=creds)
+            if creds.valid and (not interactivo or _tiene_scopes(creds, SCOPES)):
+                return creds
         except (ValueError, GoogleAuthError):
             # Token corrupto (JSON invalido) o refresh fallido (revocado,
             # expirado sin refresh_token, o error de red/transporte de
@@ -166,10 +178,31 @@ def conectar_drive(estado_dir: Path, interactivo: bool = False):
     creds = flow.run_local_server(port=0)
     estado_dir.mkdir(parents=True, exist_ok=True)
     token_path.write_text(creds.to_json(), encoding="utf-8")
+    return creds
+
+
+def conectar_drive(estado_dir: Path, interactivo: bool = False):
+    """Servicio de Drive v3 (solo metadata). Ver `credenciales_google`."""
+    from googleapiclient.discovery import build
+
+    creds = credenciales_google(estado_dir, interactivo)
     return build("drive", "v3", credentials=creds)
+
+
+def conectar_calendario(estado_dir: Path):
+    """Servicio de Calendar v3 (solo lectura). `CalendarioNoAutorizado` si el
+    token guardado se autorizo antes de que se pidiera Calendar."""
+    from googleapiclient.discovery import build
+
+    creds = credenciales_google(estado_dir, interactivo=False)
+    if not _tiene_scopes(creds, [SCOPE_CALENDARIO]):
+        raise CalendarioNoAutorizado(
+            "El permiso de Google no incluye Calendar. Corre: python -m worker.drive"
+        )
+    return build("calendar", "v3", credentials=creds)
 
 
 if __name__ == "__main__":
     _estado_dir = Path(__file__).resolve().parent.parent / "worker_estado"
     conectar_drive(_estado_dir, interactivo=True)
-    print("Autorizacion de Drive guardada.")
+    print("Autorizacion de Google (Drive y Calendar) guardada.")
