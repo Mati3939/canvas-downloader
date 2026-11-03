@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Encabezado } from "@/components/Encabezado";
 import { EnlaceVolver } from "@/components/EnlaceVolver";
@@ -15,6 +14,7 @@ import {
   type ModuloResumen,
 } from "@/components/ListaModulos";
 import { MensajeError } from "@/components/MensajeError";
+import { PestanasRamo } from "@/components/PestanasRamo";
 import { Novedad } from "@/components/Novedad";
 import { colorRamo } from "@/lib/colores";
 import { MS_POR_DIA } from "@/lib/fechas";
@@ -210,121 +210,132 @@ export default async function PaginaRamo({
           </div>
         </header>
 
-        <nav className="-mx-4 flex gap-1 overflow-x-auto border-b border-borde px-4 lg:mx-0 lg:px-0">
-          {PESTANAS.map((p) => (
-            <Link
-              key={p.valor}
-              href={p.valor === "nuevo" ? "?" : `?tab=${p.valor}`}
-              className={
-                p.valor === pestana
-                  ? "shrink-0 border-b-2 border-acento px-3 py-2 text-sm font-semibold text-texto"
-                  : "shrink-0 border-b-2 border-transparent px-3 py-2 text-sm text-texto-2 hover:text-texto"
-              }
-            >
-              {p.etiqueta}
-            </Link>
-          ))}
-        </nav>
-
-        {pestana === "nuevo" ? (
-          novedades.length === 0 ? (
-            <p className="text-sm text-texto-2">
-              No hay nada nuevo en los ultimos {DIAS_LO_NUEVO} dias.
-            </p>
-          ) : (
-            <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-              {novedades.map((novedad) => (
-                <Novedad
-                  key={`${novedad.tipo}-${novedad.id}`}
-                  novedad={novedad}
-                  nombreRamo={curso.name}
-                  colorRamo={color}
-                  ahora={ahora}
-                />
-              ))}
-            </ul>
-          )
-        ) : null}
-
-        {pestana === "anuncios" ? (
-          todosAnuncios.length === 0 ? (
-            <p className="text-sm text-texto-2">Este ramo no tiene anuncios.</p>
-          ) : (
-            <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-              {todosAnuncios.map((anuncio) => (
-                <FilaAnuncio key={anuncio.canvas_id} anuncio={anuncio} />
-              ))}
-            </ul>
-          )
-        ) : null}
-
-        {pestana === "tareas" ? (
-          <div className="flex flex-col gap-5">
-            {(
-              [
-                ["Proximas", tareasOrdenadas.proximas],
-                ["Sin fecha", tareasOrdenadas.sinFecha],
-                ["Pasadas", tareasOrdenadas.pasadas],
-              ] as const
-            ).map(([titulo, lista]) =>
-              lista.length > 0 ? (
-                <section key={titulo} className="flex flex-col gap-2">
-                  <h2 className="text-sm font-semibold text-texto">{titulo}</h2>
+        <PestanasRamo
+          inicial={pestana}
+          pestanas={[
+            {
+              valor: "nuevo",
+              etiqueta: "Lo nuevo",
+              contenido:
+                novedades.length === 0 ? (
+                  <p className="text-sm text-texto-2">
+                    No hay nada nuevo en los ultimos {DIAS_LO_NUEVO} dias.
+                  </p>
+                ) : (
                   <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-                    {lista.map((tarea) => (
-                      <FilaTarea
-                        key={tarea.canvas_id}
-                        tarea={tarea}
+                    {novedades.map((novedad) => (
+                      <Novedad
+                        key={`${novedad.tipo}-${novedad.id}`}
+                        novedad={novedad}
+                        nombreRamo={curso.name}
+                        colorRamo={color}
                         ahora={ahora}
                       />
                     ))}
                   </ul>
-                </section>
-              ) : null,
-            )}
-            {tareasOrdenadas.proximas.length +
-              tareasOrdenadas.sinFecha.length +
-              tareasOrdenadas.pasadas.length ===
-            0 ? (
-              <p className="text-sm text-texto-2">Este ramo no tiene tareas.</p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {pestana === "material" ? (
-          grupos.length === 0 ? (
-            <p className="text-sm text-texto-2">
-              Todavia no hay material sincronizado de este ramo.
-            </p>
-          ) : (
-            <div className="columns-1 gap-3 lg:columns-2">
-              {grupos.map((grupo) => (
-                <details
-                  key={`${grupo.source}-${grupo.etiqueta}`}
-                  open
-                  className="mb-3 break-inside-avoid rounded-xl border border-borde bg-superficie p-4"
-                >
-                  <summary className="cursor-pointer text-sm font-semibold text-texto">
-                    {grupo.etiqueta}
-                  </summary>
-                  <ul className="mt-2">
-                    {grupo.archivos.map((archivo) => (
-                      <FilaArchivo key={archivo.canvas_id} archivo={archivo} />
+                ),
+            },
+            {
+              valor: "anuncios",
+              etiqueta: "Anuncios",
+              contenido:
+                todosAnuncios.length === 0 ? (
+                  <p className="text-sm text-texto-2">
+                    Este ramo no tiene anuncios.
+                  </p>
+                ) : (
+                  <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                    {todosAnuncios.map((anuncio) => (
+                      <FilaAnuncio key={anuncio.canvas_id} anuncio={anuncio} />
                     ))}
                   </ul>
-                </details>
-              ))}
-            </div>
-          )
-        ) : null}
-
-        {pestana === "modulos" ? (
-          <ListaModulos
-            modulos={modulos}
-            items={items}
-            archivosPorId={archivosPorId}
-          />
-        ) : null}
+                ),
+            },
+            {
+              valor: "tareas",
+              etiqueta: "Tareas",
+              contenido: (
+                <div className="flex flex-col gap-5">
+                  {(
+                    [
+                      ["Proximas", tareasOrdenadas.proximas],
+                      ["Sin fecha", tareasOrdenadas.sinFecha],
+                      ["Pasadas", tareasOrdenadas.pasadas],
+                    ] as const
+                  ).map(([titulo, lista]) =>
+                    lista.length > 0 ? (
+                      <section key={titulo} className="flex flex-col gap-2">
+                        <h2 className="text-sm font-semibold text-texto">
+                          {titulo}
+                        </h2>
+                        <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                          {lista.map((tarea) => (
+                            <FilaTarea
+                              key={tarea.canvas_id}
+                              tarea={tarea}
+                              ahora={ahora}
+                            />
+                          ))}
+                        </ul>
+                      </section>
+                    ) : null,
+                  )}
+                  {tareasOrdenadas.proximas.length +
+                    tareasOrdenadas.sinFecha.length +
+                    tareasOrdenadas.pasadas.length ===
+                  0 ? (
+                    <p className="text-sm text-texto-2">
+                      Este ramo no tiene tareas.
+                    </p>
+                  ) : null}
+                </div>
+              ),
+            },
+            {
+              valor: "material",
+              etiqueta: "Material",
+              contenido:
+                grupos.length === 0 ? (
+                  <p className="text-sm text-texto-2">
+                    Todavia no hay material sincronizado de este ramo.
+                  </p>
+                ) : (
+                  <div className="columns-1 gap-3 lg:columns-2">
+                    {grupos.map((grupo) => (
+                      <details
+                        key={`${grupo.source}-${grupo.etiqueta}`}
+                        open
+                        className="mb-3 break-inside-avoid rounded-xl border border-borde bg-superficie p-4"
+                      >
+                        <summary className="cursor-pointer text-sm font-semibold text-texto">
+                          {grupo.etiqueta}
+                        </summary>
+                        <ul className="mt-2">
+                          {grupo.archivos.map((archivo) => (
+                            <FilaArchivo
+                              key={archivo.canvas_id}
+                              archivo={archivo}
+                            />
+                          ))}
+                        </ul>
+                      </details>
+                    ))}
+                  </div>
+                ),
+            },
+            {
+              valor: "modulos",
+              etiqueta: "Modulos",
+              contenido: (
+                <ListaModulos
+                  modulos={modulos}
+                  items={items}
+                  archivosPorId={archivosPorId}
+                />
+              ),
+            },
+          ]}
+        />
       </main>
     </>
   );

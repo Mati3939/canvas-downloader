@@ -38,9 +38,12 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  const { data } = await supabase.auth.getUser();
+  // getClaims verifica el JWT localmente con las claves publicas del
+  // proyecto (sin ir al servidor de Auth en cada navegacion) y refresca la
+  // sesion si vencio.
+  const { data } = await supabase.auth.getClaims();
 
-  if (!data.user && !esRutaPublica(request.nextUrl.pathname)) {
+  if (!data?.claims && !esRutaPublica(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
