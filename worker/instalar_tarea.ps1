@@ -30,7 +30,12 @@ if (-not (Test-Path $pythonw)) {
 $accion = New-ScheduledTaskAction -Execute $pythonw -Argument "-m worker.run" `
     -WorkingDirectory $repo
 
-$disparadorInicio = New-ScheduledTaskTrigger -AtLogOn
+# El disparador al iniciar sesion y el principal usan el mismo usuario: un
+# -AtLogOn sin -User aplica a cualquier usuario y Windows solo permite
+# registrarlo con privilegios de administrador ("Acceso denegado").
+$usuario = "$env:USERDOMAIN\$env:USERNAME"
+
+$disparadorInicio = New-ScheduledTaskTrigger -AtLogOn -User $usuario
 
 # Sin -RepetitionDuration, -Once + -RepetitionInterval repite
 # indefinidamente (Windows 10/11); con -RepetitionDuration
@@ -47,7 +52,7 @@ $config = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew `
     -ExecutionTimeLimit (New-TimeSpan -Hours 1)
 
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME `
+$principal = New-ScheduledTaskPrincipal -UserId $usuario `
     -LogonType Interactive -RunLevel Limited
 
 # -Force reemplaza la tarea si ya existe, sin un paso previo de
@@ -58,6 +63,12 @@ Register-ScheduledTask -TaskName $nombreTarea `
     -Trigger @($disparadorInicio, $disparadorPeriodico) `
     -Settings $config `
     -Principal $principal `
-    -Force | Out-Null
+    -Force -ErrorAction Stop | Out-Null
+
+# Algunos errores de registro no detienen el script (p. ej. al correr con la
+# salida redirigida): solo se informa exito si la tarea quedo registrada.
+if (-not (Get-ScheduledTask -TaskName $nombreTarea -ErrorAction SilentlyContinue)) {
+    throw "No se pudo registrar la tarea '$nombreTarea'."
+}
 
 Write-Host "Tarea '$nombreTarea' instalada: corre cada 2 horas y al iniciar sesion."
