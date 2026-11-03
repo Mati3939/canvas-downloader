@@ -17,7 +17,7 @@ export function EstadoTrabajador({
 }) {
   if (!corrida || !corrida.finished_at) {
     return (
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <p className="text-xs text-texto-2">
         Todavia no hay una sincronizacion registrada.
       </p>
     );
@@ -26,16 +26,17 @@ export function EstadoTrabajador({
   const horas = horasDesde(corrida.finished_at, ahora);
 
   return (
-    <div className="flex flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+    <div className="flex flex-col gap-1 text-xs text-texto-2">
       <p>Actualizado {tiempoRelativo(corrida.finished_at, ahora)}</p>
       {corrida.ok === false ? (
-        <p className="font-medium text-amber-600 dark:text-amber-400">
+        <p className="font-medium text-aviso">
           La ultima sincronizacion tuvo errores.
         </p>
       ) : null}
       {horas > LIMITE_HORAS_AVISO ? (
-        <p className="font-medium text-amber-600 dark:text-amber-400">
-          El PC no ha sincronizado desde {fechaHoraSantiago(corrida.finished_at)}.
+        <p className="font-medium text-aviso">
+          El PC no ha sincronizado desde{" "}
+          {fechaHoraSantiago(corrida.finished_at)}.
         </p>
       ) : null}
     </div>

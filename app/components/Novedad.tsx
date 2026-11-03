@@ -1,42 +1,51 @@
 import Link from "next/link";
-import type { Novedad as TipoNovedad } from "@/lib/novedades";
+import { PuntoRamo } from "@/components/PuntoRamo";
 import { tiempoRelativo } from "@/lib/fechas";
+import type { Novedad as TipoNovedad } from "@/lib/novedades";
 
-const ETIQUETA_TIPO: Record<TipoNovedad["tipo"], string> = {
-  anuncio: "Anuncio",
-  tarea: "Tarea",
-  archivo: "Archivo",
+const TIPO: Record<TipoNovedad["tipo"], { etiqueta: string; clase: string }> = {
+  anuncio: { etiqueta: "Anuncio", clase: "bg-acento-suave text-acento" },
+  tarea: { etiqueta: "Tarea", clase: "bg-aviso-suave text-aviso" },
+  archivo: { etiqueta: "Archivo", clase: "bg-exito-suave text-exito" },
 };
 
 /**
- * Una fila de "lo nuevo": tipo + ramo, titulo con enlace (a Canvas o a
- * Drive, segun resolvio `armarNovedades`), fecha relativa y, si tiene,
- * los adjuntos del anuncio.
+ * Una fila de "lo nuevo": tipo, ramo (con su color), titulo con enlace (a la
+ * app, a Drive o a Canvas), fecha relativa y, si tiene, los adjuntos del
+ * anuncio.
  */
 export function Novedad({
   novedad,
   nombreRamo,
+  colorRamo,
   ahora,
 }: {
   novedad: TipoNovedad;
   nombreRamo: string;
+  colorRamo: string;
   ahora: Date;
 }) {
+  const tipo = TIPO[novedad.tipo];
+  const claseTitulo =
+    "text-sm font-medium text-texto underline-offset-2 hover:underline";
   return (
-    <li className="flex flex-col gap-1 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <li className="flex flex-col gap-1.5 rounded-xl border border-borde bg-superficie p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          {ETIQUETA_TIPO[novedad.tipo]} · {nombreRamo}
+        <span className="flex min-w-0 items-center gap-2 text-xs text-texto-2">
+          <span
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${tipo.clase}`}
+          >
+            {tipo.etiqueta}
+          </span>
+          <PuntoRamo color={colorRamo} />
+          <span className="truncate">{nombreRamo}</span>
         </span>
-        <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-500">
+        <span className="shrink-0 text-xs text-texto-3">
           {tiempoRelativo(novedad.fecha, ahora)}
         </span>
       </div>
       {novedad.href.startsWith("/") ? (
-        <Link
-          href={novedad.href}
-          className="text-sm font-medium text-zinc-900 underline-offset-2 hover:underline dark:text-zinc-50"
-        >
+        <Link href={novedad.href} className={claseTitulo}>
           {novedad.titulo}
         </Link>
       ) : (
@@ -44,22 +53,22 @@ export function Novedad({
           href={novedad.href}
           target="_blank"
           rel="noreferrer"
-          className="text-sm font-medium text-zinc-900 underline-offset-2 hover:underline dark:text-zinc-50"
+          className={claseTitulo}
         >
           {novedad.titulo}
         </a>
       )}
       {novedad.adjuntos && novedad.adjuntos.length > 0 ? (
-        <ul className="mt-1 flex flex-col gap-1">
+        <ul className="flex flex-col gap-1">
           {novedad.adjuntos.map((adjunto) => (
             <li key={adjunto.canvas_id}>
               <a
                 href={adjunto.drive_url ?? adjunto.canvas_url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400"
+                className="text-xs text-acento underline-offset-2 hover:underline"
               >
-                Adjunto: {adjunto.name}
+                📎 {adjunto.name}
               </a>
             </li>
           ))}

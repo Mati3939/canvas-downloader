@@ -4,7 +4,13 @@ import { ordenarTareas, proximasEntregas, type TareaResumen } from "./tareas";
 const AHORA = new Date("2026-11-03T12:00:00Z");
 
 function tarea(id: number, due: string | null, course = 1): TareaResumen {
-  return { canvas_id: id, course_id: course, name: `T${id}`, canvas_due_at: due, canvas_url: "u" };
+  return {
+    canvas_id: id,
+    course_id: course,
+    name: `T${id}`,
+    canvas_due_at: due,
+    canvas_url: "u",
+  };
 }
 
 test("ordenarTareas separa proximas, sin fecha y pasadas", () => {

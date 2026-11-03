@@ -21,7 +21,9 @@ function resolverUrl(valor: string | undefined, base: string): URL | null {
   if (!valor) return null;
   try {
     const url = new URL(valor, base);
-    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:"
+    return url.protocol === "http:" ||
+      url.protocol === "https:" ||
+      url.protocol === "mailto:"
       ? url
       : null;
   } catch {
@@ -59,10 +61,39 @@ export function limpiarHtmlCanvas(
 ): string {
   return sanitizeHtml(html, {
     allowedTags: [
-      "p", "br", "hr", "div", "span", "strong", "b", "em", "i", "u", "s",
-      "sub", "sup", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li",
-      "blockquote", "pre", "code", "a", "img", "table", "thead", "tbody",
-      "tr", "th", "td",
+      "p",
+      "br",
+      "hr",
+      "div",
+      "span",
+      "strong",
+      "b",
+      "em",
+      "i",
+      "u",
+      "s",
+      "sub",
+      "sup",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "ul",
+      "ol",
+      "li",
+      "blockquote",
+      "pre",
+      "code",
+      "a",
+      "img",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
     ],
     allowedAttributes: {
       a: ["href", "target", "rel"],
@@ -89,7 +120,10 @@ export function limpiarHtmlCanvas(
         if (!url) return { tagName: "span", attribs: {} };
         const esDeCanvas = url.host === new URL(baseCanvas).host;
         if (!esDeCanvas) {
-          return { tagName: "img", attribs: { src: url.toString(), alt: attribs.alt ?? "" } };
+          return {
+            tagName: "img",
+            attribs: { src: url.toString(), alt: attribs.alt ?? "" },
+          };
         }
         return {
           tagName: "a",

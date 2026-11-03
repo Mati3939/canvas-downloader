@@ -9,8 +9,8 @@ export function MensajeError({
   mensaje?: string;
 }) {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-2 bg-zinc-50 px-6 text-center dark:bg-black">
-      <p className="text-sm text-red-600 dark:text-red-400">{mensaje}</p>
+    <main className="flex flex-1 flex-col items-center justify-center gap-2 bg-fondo px-6 text-center">
+      <p className="text-sm text-red-500">{mensaje}</p>
     </main>
   );
 }

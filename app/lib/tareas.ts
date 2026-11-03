@@ -15,10 +15,9 @@ export type TareasOrdenadas<T> = { proximas: T[]; sinFecha: T[]; pasadas: T[] };
  * Separa las tareas de un ramo en proximas (de la mas cercana a la mas
  * lejana), sin fecha y pasadas (de la mas reciente a la mas antigua).
  */
-export function ordenarTareas<T extends Pick<TareaResumen, "canvas_due_at" | "name">>(
-  tareas: T[],
-  ahora: Date,
-): TareasOrdenadas<T> {
+export function ordenarTareas<
+  T extends Pick<TareaResumen, "canvas_due_at" | "name">,
+>(tareas: T[], ahora: Date): TareasOrdenadas<T> {
   const proximas: T[] = [];
   const sinFecha: T[] = [];
   const pasadas: T[] = [];

@@ -75,9 +75,7 @@ describe("armarNovedades", () => {
       desde,
     );
 
-    const porTipo = Object.fromEntries(
-      novedades.map((n) => [n.tipo, n.fecha]),
-    );
+    const porTipo = Object.fromEntries(novedades.map((n) => [n.tipo, n.fecha]));
     expect(porTipo.anuncio).toBe("2026-10-05T00:00:00Z");
     expect(porTipo.tarea).toBe("2026-10-06T00:00:00Z");
     expect(porTipo.archivo).toBe("2026-10-07T00:00:00Z");
@@ -86,7 +84,10 @@ describe("armarNovedades", () => {
   test("archivo que es adjunto de un anuncio de la lista no aparece suelto, va en adjuntos del anuncio", () => {
     const unAnuncio = anuncio({ canvas_id: 1, attachment_ids: [3] });
     const unArchivo = archivo({ canvas_id: 3 });
-    const otroArchivo = archivo({ canvas_id: 4, canvas_url: "https://canvas.example/archivo/4" });
+    const otroArchivo = archivo({
+      canvas_id: 4,
+      canvas_url: "https://canvas.example/archivo/4",
+    });
 
     const novedades = armarNovedades(
       [unAnuncio],

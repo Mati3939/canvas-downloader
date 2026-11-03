@@ -1,24 +1,39 @@
 import Link from "next/link";
+import { colorRamo } from "@/lib/colores";
 import type { Curso } from "@/lib/tipos";
 
 /**
- * Tarjeta de un ramo en el inicio. Enlaza a la vista del ramo dentro de la
- * app; marca los ramos donde el rol es ayudante.
+ * Tarjeta de un ramo en el inicio, con su color. Enlaza a la vista del ramo
+ * dentro de la app; marca los ramos donde el rol es ayudante.
  */
 export function TarjetaRamo({ curso }: { curso: Curso }) {
   return (
     <Link
       href={`/ramo/${curso.canvas_id}`}
-      className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+      className="group flex items-center justify-between gap-2 overflow-hidden rounded-xl border border-borde bg-superficie py-3 pr-4 pl-0 transition-colors hover:border-borde-fuerte hover:bg-superficie-2"
     >
-      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-        {curso.name}
+      <span className="flex min-w-0 items-center gap-3">
+        <span
+          aria-hidden
+          className="h-8 w-1 shrink-0 rounded-r-full"
+          style={{ backgroundColor: colorRamo(curso) }}
+        />
+        <span className="truncate text-sm font-medium text-texto">
+          {curso.name}
+        </span>
       </span>
       {curso.role === "ta" ? (
-        <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+        <span className="shrink-0 rounded-full bg-aviso-suave px-2 py-0.5 text-xs font-medium text-aviso">
           Ayudante
         </span>
-      ) : null}
+      ) : (
+        <span
+          aria-hidden
+          className="text-texto-3 transition-transform group-hover:translate-x-0.5"
+        >
+          ›
+        </span>
+      )}
     </Link>
   );
 }

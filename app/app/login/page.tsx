@@ -25,12 +25,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-8 bg-zinc-50 px-6 dark:bg-black">
+    <main className="flex flex-1 flex-col items-center justify-center gap-8 bg-fondo px-6">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Better Canvas
-        </h1>
-        <p className="max-w-xs text-sm text-zinc-500 dark:text-zinc-400">
+        <h1 className="text-2xl font-semibold text-texto">Better Canvas</h1>
+        <p className="max-w-xs text-sm text-texto-2">
           Inicia sesion con tu cuenta de Google para ver tus ramos.
         </p>
       </div>
@@ -39,7 +37,7 @@ export default function LoginPage() {
         type="button"
         onClick={entrarConGoogle}
         disabled={cargando}
-        className="flex w-full max-w-xs items-center justify-center gap-3 rounded-full border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-900 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+        className="flex w-full max-w-xs items-center justify-center gap-3 rounded-full border border-borde-fuerte bg-superficie px-5 py-3 text-sm font-medium text-texto shadow-sm transition-colors hover:bg-superficie-2 disabled:opacity-60"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5">
           <path
@@ -63,12 +61,10 @@ export default function LoginPage() {
       </button>
 
       {error ? (
-        <p className="max-w-xs text-center text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
+        <p className="max-w-xs text-center text-sm text-red-500">{error}</p>
       ) : null}
 
-      <nav className="flex gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+      <nav className="flex gap-4 text-xs text-texto-2">
         <Link href="/acerca" className="underline">
           Acerca de
         </Link>

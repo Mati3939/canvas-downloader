@@ -1,9 +1,19 @@
 import { describe, expect, test } from "vitest";
-import { idsArchivosEnHtml, limpiarHtmlCanvas, type ArchivoEnlazable } from "./html";
+import {
+  idsArchivosEnHtml,
+  limpiarHtmlCanvas,
+  type ArchivoEnlazable,
+} from "./html";
 
 const BASE = "https://canvas.ejemplo.cl";
 const ARCHIVOS = new Map<number, ArchivoEnlazable>([
-  [11, { drive_url: "https://drive.google.com/file/d/abc/view", canvas_url: `${BASE}/courses/1/files/11` }],
+  [
+    11,
+    {
+      drive_url: "https://drive.google.com/file/d/abc/view",
+      canvas_url: `${BASE}/courses/1/files/11`,
+    },
+  ],
   [12, { drive_url: null, canvas_url: `${BASE}/courses/1/files/12` }],
 ]);
 
@@ -18,7 +28,11 @@ describe("limpiarHtmlCanvas", () => {
   });
 
   test("enlace a archivo sin Drive queda en Canvas, absoluto", () => {
-    const limpio = limpiarHtmlCanvas('<a href="/courses/1/files/12/download">x</a>', BASE, ARCHIVOS);
+    const limpio = limpiarHtmlCanvas(
+      '<a href="/courses/1/files/12/download">x</a>',
+      BASE,
+      ARCHIVOS,
+    );
     expect(limpio).toContain(`href="${BASE}/courses/1/files/12/download"`);
   });
 
@@ -32,14 +46,22 @@ describe("limpiarHtmlCanvas", () => {
   });
 
   test("imagen de Canvas se reemplaza por un enlace", () => {
-    const limpio = limpiarHtmlCanvas(`<img src="/courses/1/files/12/preview" alt="grafico">`, BASE, ARCHIVOS);
+    const limpio = limpiarHtmlCanvas(
+      `<img src="/courses/1/files/12/preview" alt="grafico">`,
+      BASE,
+      ARCHIVOS,
+    );
     expect(limpio).toContain("<a ");
     expect(limpio).toContain("[Imagen: grafico]");
     expect(limpio).not.toContain("<img");
   });
 
   test("imagen externa se mantiene", () => {
-    const limpio = limpiarHtmlCanvas('<img src="https://otro.cl/a.png" alt="">', BASE, ARCHIVOS);
+    const limpio = limpiarHtmlCanvas(
+      '<img src="https://otro.cl/a.png" alt="">',
+      BASE,
+      ARCHIVOS,
+    );
     expect(limpio).toContain('<img src="https://otro.cl/a.png"');
   });
 });

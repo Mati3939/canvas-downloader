@@ -52,7 +52,8 @@ export function agruparMaterial(archivos: Archivo[]): GrupoMaterial[] {
 
   for (const grupo of grupos.values()) {
     grupo.archivos.sort(
-      (a, b) => new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime(),
+      (a, b) =>
+        new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime(),
     );
   }
 
@@ -78,6 +79,7 @@ export function formatearTamano(bytes: number): string {
     valor /= 1024;
     i++;
   }
-  const texto = i === 0 ? String(Math.round(valor)) : valor.toFixed(1).replace(".", ",");
+  const texto =
+    i === 0 ? String(Math.round(valor)) : valor.toFixed(1).replace(".", ",");
   return `${texto} ${UNIDADES_TAMANO[i]}`;
 }

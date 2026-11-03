@@ -8,7 +8,8 @@ export type AnuncioResumen = {
   attachment_ids: number[];
 };
 
-export const COLUMNAS_ANUNCIO_RESUMEN = "canvas_id, title, posted_at, attachment_ids";
+export const COLUMNAS_ANUNCIO_RESUMEN =
+  "canvas_id, title, posted_at, attachment_ids";
 
 /** Fila de anuncio en la lista del ramo. */
 export function FilaAnuncio({ anuncio }: { anuncio: AnuncioResumen }) {
@@ -17,12 +18,12 @@ export function FilaAnuncio({ anuncio }: { anuncio: AnuncioResumen }) {
     <li>
       <Link
         href={`/anuncio/${anuncio.canvas_id}`}
-        className="flex flex-col gap-1 rounded-xl border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+        className="flex flex-col gap-1 rounded-xl border border-borde bg-superficie p-4 transition-colors hover:border-borde-fuerte hover:bg-superficie-2"
       >
-        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+        <span className="text-sm font-medium text-texto">
           {anuncio.title || "Sin titulo"}
         </span>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="text-xs text-texto-2">
           {fechaHoraSantiago(anuncio.posted_at)}
           {n > 0 ? ` · ${n} ${n === 1 ? "adjunto" : "adjuntos"}` : ""}
         </span>

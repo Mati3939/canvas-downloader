@@ -46,14 +46,14 @@ export function ListaModulos({
 }) {
   if (modulos.length === 0) {
     return (
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-texto-2">
         Este ramo todavia no tiene modulos.
       </p>
     );
   }
 
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className="columns-1 gap-3 lg:columns-2">
       {modulos.map((modulo) => {
         const itemsDelModulo = items
           .filter((item) => item.module_id === modulo.canvas_id)
@@ -62,10 +62,10 @@ export function ListaModulos({
         return (
           <li
             key={modulo.canvas_id}
-            className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+            className="mb-3 break-inside-avoid rounded-xl border border-borde bg-superficie p-4"
           >
             <details open>
-              <summary className="cursor-pointer text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              <summary className="cursor-pointer text-sm font-semibold text-texto">
                 {modulo.name}
               </summary>
               <ul className="mt-2 flex flex-col gap-1.5 pl-1">
@@ -78,14 +78,12 @@ export function ListaModulos({
                           href={href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-zinc-700 underline-offset-2 hover:underline dark:text-zinc-300"
+                          className="text-texto-2 underline-offset-2 hover:text-texto hover:underline"
                         >
                           {item.title}
                         </a>
                       ) : (
-                        <span className="text-zinc-400 dark:text-zinc-600">
-                          {item.title}
-                        </span>
+                        <span className="text-texto-3">{item.title}</span>
                       )}
                     </li>
                   );

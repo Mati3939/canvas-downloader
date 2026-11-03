@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Resumen de tus ramos de Canvas, sin entrar a Canvas.",
     start_url: "/",
     display: "standalone",
-    background_color: "#0a0a0a",
-    theme_color: "#0a0a0a",
+    background_color: "#0b0f16",
+    theme_color: "#0b0f16",
     icons: [
       {
         src: "/icons/icon-192.png",
