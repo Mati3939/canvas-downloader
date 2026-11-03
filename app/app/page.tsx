@@ -167,57 +167,79 @@ export default async function Home() {
   return (
     <>
       <Encabezado />
-      <main className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 content-start gap-8 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10 lg:px-8 lg:py-10">
-        <section className="flex flex-col gap-3 lg:col-start-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <h1 className="text-base font-semibold text-texto">
-              Hoy{" "}
-              <span className="font-normal text-texto-2 capitalize">
-                · {nombreDia(hoy)}
-              </span>
-            </h1>
-            <Link
-              href="/horario"
-              className="text-xs font-medium text-acento hover:underline"
-            >
-              Ver horario →
-            </Link>
-          </div>
-          {eventosHoy.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
-              Hoy no tienes clases ni evaluaciones en tu calendario.
-            </p>
-          ) : (
-            <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-              {eventosHoy.map((e) => (
-                <FilaEvento
-                  key={e.google_id}
-                  evento={e}
-                  colorRamo={colorDeEvento(e.title)}
-                  ahora={ahora}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
+      <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col gap-8 px-4 py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-10 lg:px-8 lg:py-10 2xl:grid-cols-[minmax(0,1fr)_400px] 2xl:px-12">
+        <div className="contents lg:flex lg:flex-col lg:gap-8 2xl:grid 2xl:grid-cols-2 2xl:items-start 2xl:gap-x-8 2xl:gap-y-8">
+          <section className="order-1 flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <h1 className="text-base font-semibold text-texto">
+                Hoy{" "}
+                <span className="font-normal text-texto-2 capitalize">
+                  · {nombreDia(hoy)}
+                </span>
+              </h1>
+              <Link
+                href="/horario"
+                className="text-xs font-medium text-acento hover:underline"
+              >
+                Ver horario →
+              </Link>
+            </div>
+            {eventosHoy.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
+                Hoy no tienes clases ni evaluaciones en tu calendario.
+              </p>
+            ) : (
+              <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                {eventosHoy.map((e) => (
+                  <FilaEvento
+                    key={e.google_id}
+                    evento={e}
+                    colorRamo={colorDeEvento(e.title)}
+                    ahora={ahora}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
 
-        <section className="flex flex-col gap-3 lg:col-start-1">
-          <h2 className="text-base font-semibold text-texto">
-            Proximas entregas y evaluaciones
-          </h2>
-          {pendientes.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
-              No hay entregas con fecha ni evaluaciones en los proximos{" "}
-              {DIAS_ENTREGAS} dias.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {pendientes.map((p) => p.nodo)}
-            </ul>
-          )}
-        </section>
+          <section className="order-2 flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-texto">
+              Proximas entregas y evaluaciones
+            </h2>
+            {pendientes.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
+                No hay entregas con fecha ni evaluaciones en los proximos{" "}
+                {DIAS_ENTREGAS} dias.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {pendientes.map((p) => p.nodo)}
+              </ul>
+            )}
+          </section>
 
-        <aside className="flex flex-col gap-3 lg:col-start-2 lg:row-span-3 lg:row-start-1">
+          <section className="order-4 flex flex-col gap-3 2xl:col-span-2">
+            <h2 className="text-base font-semibold text-texto">Lo nuevo</h2>
+            {novedades.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
+                No hay nada nuevo en los ultimos {DIAS_LO_NUEVO} dias.
+              </p>
+            ) : (
+              <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2 2xl:grid-cols-3">
+                {novedades.map((novedad) => (
+                  <Novedad
+                    key={`${novedad.tipo}-${novedad.id}`}
+                    novedad={novedad}
+                    nombreRamo={nombrePorCurso.get(novedad.courseId) ?? "Ramo"}
+                    colorRamo={colorPorCurso.get(novedad.courseId) ?? "#888"}
+                    ahora={ahora}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+        <aside className="order-3 flex flex-col gap-3 lg:sticky lg:top-16">
           <h2 className="text-base font-semibold text-texto">Tus ramos</h2>
           {cursos.length === 0 ? (
             <p className="text-sm text-texto-2">
@@ -234,27 +256,6 @@ export default async function Home() {
             <EstadoTrabajador corrida={corrida} ahora={ahora} />
           </div>
         </aside>
-
-        <section className="flex flex-col gap-3 lg:col-start-1">
-          <h2 className="text-base font-semibold text-texto">Lo nuevo</h2>
-          {novedades.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-borde px-4 py-3 text-sm text-texto-2">
-              No hay nada nuevo en los ultimos {DIAS_LO_NUEVO} dias.
-            </p>
-          ) : (
-            <ul className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-              {novedades.map((novedad) => (
-                <Novedad
-                  key={`${novedad.tipo}-${novedad.id}`}
-                  novedad={novedad}
-                  nombreRamo={nombrePorCurso.get(novedad.courseId) ?? "Ramo"}
-                  colorRamo={colorPorCurso.get(novedad.courseId) ?? "#888"}
-                  ahora={ahora}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
       </main>
     </>
   );

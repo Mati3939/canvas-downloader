@@ -172,7 +172,7 @@ export default async function PaginaRamo({
   return (
     <>
       <Encabezado />
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
+      <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
         <EnlaceVolver href="/" texto="Inicio" />
         <header
           className="flex flex-col gap-3 border-l-4 pl-3"
@@ -222,7 +222,7 @@ export default async function PaginaRamo({
                     No hay nada nuevo en los ultimos {DIAS_LO_NUEVO} dias.
                   </p>
                 ) : (
-                  <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                  <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                     {novedades.map((novedad) => (
                       <Novedad
                         key={`${novedad.tipo}-${novedad.id}`}
@@ -244,7 +244,7 @@ export default async function PaginaRamo({
                     Este ramo no tiene anuncios.
                   </p>
                 ) : (
-                  <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                  <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                     {todosAnuncios.map((anuncio) => (
                       <FilaAnuncio key={anuncio.canvas_id} anuncio={anuncio} />
                     ))}
@@ -268,7 +268,7 @@ export default async function PaginaRamo({
                         <h2 className="text-sm font-semibold text-texto">
                           {titulo}
                         </h2>
-                        <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                        <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                           {lista.map((tarea) => (
                             <FilaTarea
                               key={tarea.canvas_id}
@@ -300,7 +300,7 @@ export default async function PaginaRamo({
                     Todavia no hay material sincronizado de este ramo.
                   </p>
                 ) : (
-                  <div className="columns-1 gap-3 lg:columns-2">
+                  <div className="columns-1 gap-3 lg:columns-2 2xl:columns-3">
                     {grupos.map((grupo) => (
                       <details
                         key={`${grupo.source}-${grupo.etiqueta}`}

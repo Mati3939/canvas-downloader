@@ -82,7 +82,7 @@ export default async function PaginaHorario({
   return (
     <>
       <Encabezado />
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
+      <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-texto lg:text-2xl">
@@ -119,7 +119,7 @@ export default async function PaginaHorario({
           </p>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {dias.map((dia) => {
             const delDia = porDia.get(dia) ?? [];
             if (delDia.length === 0 && dia !== hoy) return null;

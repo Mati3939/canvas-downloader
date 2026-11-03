@@ -55,6 +55,22 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* En pantallas grandes todo (medido en rem) crece un poco, para que el
+   contenido no se vea diminuto en monitores anchos. */
+html {
+  font-size: 100%;
+}
+@media (min-width: 1800px) {
+  html {
+    font-size: 112.5%;
+  }
+}
+@media (min-width: 2400px) {
+  html {
+    font-size: 125%;
+  }
+}
+
 body {
   background: var(--fondo);
   color: var(--texto);

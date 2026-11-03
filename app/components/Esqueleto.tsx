@@ -1,7 +1,7 @@
 import { Encabezado } from "@/components/Encabezado";
 
 /** Pantalla de carga: bloques grises mientras llegan los datos. */
-export function Esqueleto({ ancho = "max-w-6xl" }: { ancho?: string }) {
+export function Esqueleto({ ancho = "max-w-[1800px]" }: { ancho?: string }) {
   return (
     <>
       <Encabezado />

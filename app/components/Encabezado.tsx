@@ -4,7 +4,7 @@ import Link from "next/link";
 export function Encabezado() {
   return (
     <header className="sticky top-0 z-10 border-b border-borde bg-fondo/85 backdrop-blur">
-      <div className="mx-auto flex h-12 w-full max-w-6xl items-center justify-between px-4 lg:px-8">
+      <div className="mx-auto flex h-12 w-full max-w-[1800px] items-center justify-between px-4 lg:px-8 2xl:px-12">
         <Link
           href="/"
           className="flex items-center gap-2 text-sm font-semibold text-texto"

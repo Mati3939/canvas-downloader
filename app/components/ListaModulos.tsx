@@ -53,7 +53,7 @@ export function ListaModulos({
   }
 
   return (
-    <ul className="columns-1 gap-3 lg:columns-2">
+    <ul className="columns-1 gap-3 lg:columns-2 2xl:columns-3">
       {modulos.map((modulo) => {
         const itemsDelModulo = items
           .filter((item) => item.module_id === modulo.canvas_id)

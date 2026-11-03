@@ -84,7 +84,7 @@ export default async function PaginaTarea({
   return (
     <>
       <Encabezado />
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 lg:py-10">
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4 py-6 lg:py-10">
         <EnlaceVolver
           href={`/ramo/${tarea.course_id}?tab=tareas`}
           texto={curso?.name ?? "Ramo"}

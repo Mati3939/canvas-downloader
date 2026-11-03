@@ -80,7 +80,7 @@ export default async function PaginaAnuncio({
   return (
     <>
       <Encabezado />
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 lg:py-10">
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-4 py-6 lg:py-10">
         <EnlaceVolver
           href={`/ramo/${anuncio.course_id}?tab=anuncios`}
           texto={curso?.name ?? "Ramo"}
