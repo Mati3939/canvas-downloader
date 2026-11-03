@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import {
   agruparPorDia,
   claveDia,
+  hora,
   lunesDeLaSemana,
   ramoDeEvento,
   sumarDias,
@@ -45,4 +46,9 @@ test("ramoDeEvento reconoce el ramo en el titulo", () => {
     ramoDeEvento("Certamen 2 - Visualización de Datos", cursos)?.canvas_id,
   ).toBe(2);
   expect(ramoDeEvento("Certamen 2 TOPD", cursos)).toBeNull();
+});
+
+test("hora usa 24 horas en Santiago", () => {
+  expect(hora("2026-11-04T19:00:00Z")).toBe("16:00");
+  expect(hora("2026-11-04T11:50:00Z")).toBe("08:50");
 });

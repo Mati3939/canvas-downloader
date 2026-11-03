@@ -57,12 +57,13 @@ export function agruparPorDia<T extends Pick<EventoResumen, "start_at">>(
   return grupos;
 }
 
-/** Hora local "HH:MM". */
+/** Hora local "HH:MM" en formato de 24 horas. */
 export function hora(fecha: string | Date): string {
   return new Intl.DateTimeFormat("es-CL", {
     timeZone: ZONA,
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   }).format(new Date(fecha));
 }
 

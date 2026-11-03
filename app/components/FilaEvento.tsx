@@ -1,9 +1,10 @@
 import { PuntoRamo } from "@/components/PuntoRamo";
-import { hora, nombreDia, claveDia, type EventoResumen } from "@/lib/horario";
+import { claveDia, hora, nombreDia, type EventoResumen } from "@/lib/horario";
 
 /**
- * Un evento del calendario: clase (hora, titulo, sala) o evaluacion
- * (destacada). Con `conDia`, muestra tambien el dia.
+ * Un evento del calendario: clase o evaluacion (destacada). Se apila en
+ * vertical (hora y etiqueta arriba, titulo y sala abajo) para que se lea
+ * bien tanto en listas anchas como en columnas angostas del horario.
  */
 export function FilaEvento({
   evento,
@@ -20,51 +21,58 @@ export function FilaEvento({
   const enCurso =
     new Date(evento.start_at) <= ahora && ahora < new Date(evento.end_at);
   const pasado = new Date(evento.end_at) <= ahora;
+  const horario = evento.all_day
+    ? "Todo el dia"
+    : `${hora(evento.start_at)}–${hora(evento.end_at)}`;
+
   const contenido = (
     <>
-      <div className="flex w-24 shrink-0 flex-col text-xs">
-        {conDia ? (
-          <span className="font-medium text-texto capitalize">
-            {nombreDia(claveDia(evento.start_at))}
-          </span>
-        ) : null}
-        <span className="text-texto-2 tabular-nums">
-          {evento.all_day
-            ? "Todo el dia"
-            : `${hora(evento.start_at)}–${hora(evento.end_at)}`}
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-xs text-texto-2 tabular-nums">
+          {conDia ? (
+            <span className="font-medium text-texto capitalize">
+              {nombreDia(claveDia(evento.start_at))} ·{" "}
+            </span>
+          ) : null}
+          {horario}
         </span>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-center gap-2">
-          {colorRamo ? <PuntoRamo color={colorRamo} /> : null}
-          <span
-            className={`text-sm font-medium ${pasado ? "text-texto-2" : "text-texto"}`}
-          >
-            {evento.title || "Sin titulo"}
+        {esEvaluacion ? (
+          <span className="shrink-0 rounded-md bg-aviso-suave px-1.5 py-0.5 text-[11px] font-semibold text-aviso">
+            Evaluacion
           </span>
-        </span>
-        {evento.location ? (
-          <span className="truncate text-xs text-texto-2">
-            {evento.location}
+        ) : enCurso ? (
+          <span className="shrink-0 rounded-md bg-exito-suave px-1.5 py-0.5 text-[11px] font-semibold text-exito">
+            Ahora
           </span>
         ) : null}
       </div>
-      {esEvaluacion ? (
-        <span className="shrink-0 self-start rounded-md bg-aviso-suave px-1.5 py-0.5 text-[11px] font-semibold text-aviso">
-          Evaluacion
+      <div className="flex items-start gap-2">
+        {colorRamo ? (
+          <span className="mt-1.5">
+            <PuntoRamo color={colorRamo} />
+          </span>
+        ) : null}
+        <span
+          className={`min-w-0 text-sm leading-snug font-medium break-words ${
+            pasado ? "text-texto-2" : "text-texto"
+          }`}
+        >
+          {evento.title || "Sin titulo"}
         </span>
-      ) : enCurso ? (
-        <span className="shrink-0 self-start rounded-md bg-exito-suave px-1.5 py-0.5 text-[11px] font-semibold text-exito">
-          Ahora
+      </div>
+      {evento.location ? (
+        <span className="text-xs leading-snug text-texto-2">
+          {evento.location}
         </span>
       ) : null}
     </>
   );
-  const clase = `flex items-start gap-3 rounded-xl border bg-superficie p-3 ${
+
+  const clase = `flex flex-col gap-1.5 rounded-xl border bg-superficie p-3 ${
     esEvaluacion ? "border-aviso/40" : "border-borde"
   }`;
   return (
-    <li>
+    <li className="min-w-0">
       {evento.html_link ? (
         <a
           href={evento.html_link}
